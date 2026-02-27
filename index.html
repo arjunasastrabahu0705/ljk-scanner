@@ -1,0 +1,1383 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>LJK Scanner</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--card:#171b27;--border:#252a3a;--fg:#e8eaf0;
+  --muted:#6b7280;--accent:#4f8ef7;--accent-dim:rgba(79,142,247,.13);
+  --green:#10b981;--red:#ef4444;--yellow:#f59e0b;
+}
+html,body{min-height:100%;background:var(--bg);color:var(--fg);font-family:'DM Sans',sans-serif;font-size:14px;-webkit-tap-highlight-color:transparent}
+h2{font-family:'Space Mono',monospace;font-size:15px;font-weight:700;color:var(--accent);margin-bottom:14px}
+button{font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s;border:none}
+input{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--fg);border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;width:100%;outline:none;font-size:13px;transition:border-color .2s}
+input:focus{border-color:var(--accent)}
+label{display:block;font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.6px}
+#app{max-width:1140px;margin:0 auto;padding:0 14px 60px}
+.header{padding:20px 0 14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;border-bottom:1px solid var(--border);margin-bottom:20px}
+.logo{font-family:'Space Mono',monospace;font-size:21px;font-weight:700;color:var(--accent);letter-spacing:-1px}
+.logo span{color:var(--fg)}
+.logo small{display:block;font-size:10px;font-weight:400;color:var(--muted);letter-spacing:.4px;margin-top:2px}
+.badges{display:flex;gap:8px;flex-wrap:wrap}
+.badge{background:var(--card);padding:4px 11px;border-radius:20px;border:1px solid var(--border);font-size:11px;color:var(--muted)}
+.badge.ok{color:var(--green);border-color:#065f46;background:#022c22}
+.nav{display:flex;gap:3px;background:var(--card);padding:4px;border-radius:14px;margin-bottom:22px;border:1px solid var(--border)}
+.nav button{flex:1;padding:10px 6px;border-radius:10px;background:transparent;color:var(--muted);font-size:12.5px;font-weight:500;display:flex;align-items:center;justify-content:center;gap:5px}
+.nav button.active{background:var(--accent);color:#fff;font-weight:700;box-shadow:0 2px 12px rgba(79,142,247,.35)}
+.card{background:var(--card);border-radius:16px;padding:20px;border:1px solid var(--border);margin-bottom:14px}
+.row{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.col-300{flex:0 0 290px}
+.col-flex{flex:1;min-width:260px}
+.btn{padding:11px 18px;border-radius:11px;font-size:13px;font-weight:700}
+.btn-primary{background:var(--accent);color:#fff;width:100%;box-shadow:0 2px 10px rgba(79,142,247,.3)}
+.btn-primary:hover{background:#3b7de8}
+.btn-ghost{background:transparent;border:2px solid var(--border);color:var(--muted)}
+.btn-ghost:hover{border-color:var(--accent);color:var(--fg)}
+.btn-danger{background:var(--red);color:#fff}
+.btn-yellow{background:var(--yellow);color:#111;font-weight:700}
+.btn-sm{padding:7px 13px;font-size:12px;border-radius:8px;width:auto}
+.chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+.chip{padding:6px 13px;border-radius:8px;border:1.5px solid var(--border);background:transparent;color:var(--fg);font-size:12.5px}
+.chip.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+.answer-grid{display:flex;gap:12px;flex-wrap:wrap}
+.answer-col{display:flex;flex-direction:column;gap:4px}
+.answer-row{display:flex;align-items:center;gap:3px;font-size:11px;font-family:'Space Mono',monospace}
+.ans-num{width:22px;text-align:right;font-weight:700;color:var(--fg);font-size:10.5px}
+.bbl{width:25px;height:25px;border-radius:50%;border:2px solid var(--border);background:transparent;color:var(--muted);font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;transition:all .12s}
+.bbl:not(:disabled):hover{border-color:var(--accent);color:var(--fg)}
+.bbl.sel{background:var(--accent);border-color:var(--accent);color:#fff}
+.bbl.ok{background:var(--green)!important;border-color:var(--green)!important;color:#fff!important}
+.bbl.bad{background:var(--red)!important;border-color:var(--red)!important;color:#fff!important}
+.bbl.hint{background:rgba(16,185,129,.15);border-color:var(--green)}
+#debug-canvas{border-radius:10px;max-width:100%;display:block}
+#overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:999;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+#overlay.on{display:flex}
+.spinner{width:46px;height:46px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-bottom:18px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:14px;text-align:center}
+.stat-num{font-size:26px;font-weight:700;color:var(--accent);font-family:'Space Mono',monospace}
+.stat-lbl{font-size:10px;color:var(--muted);margin-top:3px}
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{padding:10px 12px;text-align:left;font-weight:700;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.4px;border-bottom:2px solid var(--border)}
+.tbl td{padding:10px 12px;border-bottom:1px solid var(--border)}
+.tbl tr:hover td{background:var(--accent-dim)}
+.pill{padding:3px 9px;border-radius:20px;font-size:10.5px;font-weight:700}
+.pill-g{background:#d1fae5;color:#065f46}
+.pill-r{background:#fee2e2;color:#991b1b}
+#ljk-preview{background:#fff;color:#111;font-family:'Space Mono',monospace;font-size:10px;padding:22px;width:595px;min-height:842px;border:1px solid #ddd;box-shadow:0 4px 20px rgba(0,0,0,.15)}
+#scan-log{font-size:10.5px;color:var(--muted);font-family:'Space Mono',monospace;max-height:72px;overflow-y:auto;margin-top:8px;line-height:1.6}
+.score-big{font-size:40px;font-weight:700;font-family:'Space Mono',monospace;text-align:center;padding:12px 0 4px}
+@media(max-width:600px){
+  .col-300{flex:0 0 100%}
+  #ljk-preview{transform:scale(.52);transform-origin:top left;margin-bottom:-400px}
+}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+
+/* ── Export buttons ────────────────────────────────────── */
+.btn-export-wrap{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.btn-pdf{background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;font-weight:700;border-radius:10px;padding:9px 16px;font-size:12.5px;display:flex;align-items:center;gap:6px;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(220,38,38,.35);transition:all .15s}
+.btn-pdf:hover{background:linear-gradient(135deg,#b91c1c,#991b1b);transform:translateY(-1px)}
+.btn-png{background:linear-gradient(135deg,#0369a1,#0284c7);color:#fff;font-weight:700;border-radius:10px;padding:9px 16px;font-size:12.5px;display:flex;align-items:center;gap:6px;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(3,105,161,.35);transition:all .15s}
+.btn-png:hover{background:linear-gradient(135deg,#075985,#0369a1);transform:translateY(-1px)}
+.btn-export-wrap button:disabled{opacity:.5;cursor:not-allowed;transform:none}
+/* Export options row */
+.export-opts{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px;padding:10px 14px;background:var(--bg);border-radius:10px;font-size:12px}
+.export-opts label{text-transform:none;letter-spacing:0;font-size:12px;color:var(--fg);font-weight:500;display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:0}
+.export-opts input[type=checkbox]{width:15px;height:15px;accent-color:var(--accent);cursor:pointer}
+#login-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:2000;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+#login-modal.on{display:flex}
+.login-box{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:36px 32px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.5);animation:popIn .25s ease}
+@keyframes popIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
+.login-logo{font-family:'Space Mono',monospace;font-size:20px;font-weight:700;color:var(--accent);text-align:center;margin-bottom:4px}
+.login-logo span{color:var(--fg)}
+.login-sub{text-align:center;font-size:12px;color:var(--muted);margin-bottom:28px}
+.login-err{background:#450a0a;color:#fca5a5;border:1px solid #7f1d1d;border-radius:9px;padding:9px 13px;font-size:12px;margin-bottom:14px;display:none}
+.input-wrap{position:relative;margin-bottom:14px}
+.input-wrap input{padding-right:44px}
+.eye-btn{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:4px;line-height:1}
+.eye-btn:hover{color:var(--fg)}
+
+/* ── Admin indicator in header ─────────────────────────── */
+.admin-chip{display:inline-flex;align-items:center;gap:5px;background:#064e3b;border:1px solid var(--green);color:var(--green);border-radius:20px;padding:4px 11px;font-size:11px;font-weight:700;cursor:pointer}
+.admin-chip:hover{background:#065f46}
+</style>
+</head>
+<body>
+
+<!-- ── Login Admin Modal ─────────────────────────────────────── -->
+<div id="login-modal">
+  <div class="login-box">
+    <div class="login-logo">LJK<span>Scanner</span></div>
+    <div class="login-sub">🔐 Masuk sebagai Administrator</div>
+    <div class="login-err" id="login-err">❌ Username atau password salah.</div>
+    <label>Username</label>
+    <div class="input-wrap" style="margin-bottom:14px">
+      <input id="login-user" type="text" placeholder="Masukkan username" autocomplete="off" onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
+    <label>Password</label>
+    <div class="input-wrap">
+      <input id="login-pass" type="password" placeholder="Masukkan password" onkeydown="if(event.key==='Enter')doLogin()"/>
+      <button class="eye-btn" onclick="toggleEye()" id="eye-btn" title="Tampilkan/Sembunyikan">👁</button>
+    </div>
+    <button class="btn btn-primary" onclick="doLogin()" style="margin-top:6px">🔓 Login Admin</button>
+    <button class="btn btn-ghost" onclick="closeLoginModal()" style="margin-top:8px;width:100%;font-size:12px">Batal</button>
+    <div style="text-align:center;font-size:11px;color:var(--muted);margin-top:16px;line-height:1.6">
+      Halaman Pengaturan hanya dapat diakses<br>oleh Administrator sistem.
+    </div>
+  </div>
+</div>
+
+<div id="overlay">
+  <div class="spinner"></div>
+  <div style="color:var(--fg);font-size:14px;font-weight:600" id="ov-title">Menganalisis...</div>
+  <div style="color:var(--muted);font-size:12px" id="ov-sub">Mohon tunggu</div>
+</div>
+
+<div id="app">
+  <div class="header">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="logo">LJK<span>Scanner</span><small>⚡ Pure JS · LocalStorage · Google Sheets sync</small></div>
+      <!-- Titik samar — trigger login admin tersembunyi -->
+      <span id="secret-dot"
+        onclick="handleSecretTap()"
+        title=""
+        style="width:15px;height:15px;border-radius:50%;background:var(--border);display:inline-block;cursor:default;opacity:0.35;flex-shrink:0;margin-top:-14px;transition:opacity .2s"
+        onmouseenter="this.style.opacity='.35'"
+      ></span>
+    </div>
+    <div class="badges">
+      <div class="badge" id="bdg-tpl">0 Template</div>
+      <div class="badge" id="bdg-res">0 Hasil</div>
+      <div class="badge ok">✅ Engine Siap</div>
+      <div id="admin-chip-wrap"></div>
+    </div>
+  </div>
+
+  <div class="nav">
+    <button class="active" onclick="showPage('create')" id="nav-create">📝 <span>Buat LJK</span></button>
+    <button onclick="showPage('scan')" id="nav-scan">📷 <span>Scan LJK</span></button>
+    <button onclick="showPage('report')" id="nav-report">📊 <span>Report</span></button>
+    <button onclick="adminGate('settings')" id="nav-settings" style="display:none">⚙ <span>Pengaturan</span></button>
+  </div>
+
+  <!-- PAGE CREATE -->
+  <div id="page-create">
+    <div class="row">
+      <div class="col-300">
+        <div class="card">
+          <h2>⚙ Konfigurasi</h2>
+          <label>Mata Pelajaran</label>
+          <input id="cfg-subj" placeholder="Contoh: Matematika" style="margin-bottom:14px" oninput="renderPreview()"/>
+          <label>Jumlah Soal</label>
+          <div class="chips" id="chips-q">
+            <button class="chip active" data-v="20" onclick="pickQ(this)">20</button>
+            <button class="chip" data-v="25" onclick="pickQ(this)">25</button>
+            <button class="chip" data-v="30" onclick="pickQ(this)">30</button>
+            <button class="chip" data-v="40" onclick="pickQ(this)">40</button>
+            <button class="chip" data-v="50" onclick="pickQ(this)">50</button>
+          </div>
+          <label>Pilihan Jawaban</label>
+          <div class="chips" id="chips-a">
+            <button class="chip" data-v="3" onclick="pickA(this)">A-B-C</button>
+            <button class="chip active" data-v="4" onclick="pickA(this)">A-B-C-D</button>
+            <button class="chip" data-v="5" onclick="pickA(this)">A-B-C-D-E</button>
+          </div>
+          <div style="background:var(--bg);border-radius:9px;padding:10px 13px;font-size:11.5px;color:var(--muted);margin-bottom:16px;line-height:1.6">
+            💡 Klik bulatan di panel kunci jawaban untuk memasukkan jawaban benar setiap soal.
+          </div>
+          <button class="btn btn-primary" onclick="saveTemplate()">💾 Simpan Template</button>
+
+          <!-- Export LJK -->
+          <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Export Format LJK</div>
+            <div class="export-opts">
+              <label><input type="checkbox" id="exp-key" checked/> Tampilkan kunci jawaban</label>
+              <label><input type="checkbox" id="exp-copies" /> Cetak ganda (2 per halaman)</label>
+            </div>
+            <div class="btn-export-wrap">
+              <button class="btn-pdf" onclick="exportPDF()" id="btn-export-pdf">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M10,19L12,15H10V11H14V15L12,19H10Z"/></svg>
+                Download PDF
+              </button>
+              <button class="btn-png" onclick="exportPNG()" id="btn-export-png">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8.5,13.5L11,16.5L14.5,12L19,18H5M21,19V5C21,3.89 20.1,3 19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19Z"/></svg>
+                Download PNG
+              </button>
+            </div>
+            <div id="export-status" style="font-size:11px;color:var(--muted);margin-top:8px;min-height:16px"></div>
+          </div>
+        </div><!-- /card -->
+      </div><!-- /col-300 -->
+
+      <div class="col-flex">
+        <div class="card">
+          <h2>🔑 Kunci Jawaban</h2>
+          <p style="font-size:11.5px;color:var(--muted);margin-bottom:14px">Klik huruf untuk pilih · Klik lagi untuk batal</p>
+          <div class="answer-grid" id="key-grid"></div>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Preview LJK (A4)</div>
+        <div style="transform:scale(.7);transform-origin:top left;width:595px;margin-bottom:-252px">
+          <div id="ljk-preview"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAGE SCAN -->
+  <div id="page-scan" style="display:none">
+    <div class="row">
+      <div class="col-300">
+        <div class="card">
+          <h2>📋 Template</h2>
+          <div id="tpl-list"><p style="font-size:12px;color:var(--muted)">Belum ada template.</p></div>
+        </div>
+        <div class="card">
+          <h2>👤 Identitas Siswa</h2>
+          <label>Nama Siswa</label>
+          <input id="stu-name" placeholder="Nama lengkap" style="margin-bottom:10px"/>
+          <label>Kelas</label>
+          <input id="stu-cls" placeholder="Contoh: X IPA 1"/>
+        </div>
+        <div class="card" id="card-stats" style="display:none">
+          <h2>📈 Hasil Scan</h2>
+          <div id="stats-body"></div>
+          <button class="btn btn-primary" style="margin-top:12px" onclick="saveResult()">💾 Simpan Hasil</button>
+        </div>
+      </div>
+
+      <div class="col-flex">
+        <div class="card">
+          <h2>📷 Foto LJK</h2>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+            <button class="btn btn-ghost btn-sm" onclick="openCam()">📷 Kamera</button>
+            <button class="btn btn-ghost btn-sm" onclick="G('file-in').click()">📁 Upload</button>
+            <button class="btn btn-yellow btn-sm" onclick="makeSample()">🧪 Coba Sampel</button>
+            <input id="file-in" type="file" accept="image/*" style="display:none" onchange="loadFile(event)"/>
+          </div>
+          <div id="cam-box" style="display:none;margin-bottom:10px">
+            <video id="cam-vid" autoplay playsinline style="width:100%;border-radius:10px;margin-bottom:8px"></video>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-primary btn-sm" onclick="snapPhoto()" style="flex:1;width:auto">📸 Ambil</button>
+              <button class="btn btn-danger btn-sm" onclick="stopCam()">✕ Batal</button>
+            </div>
+          </div>
+          <canvas id="src-canvas" style="display:none"></canvas>
+          <canvas id="debug-canvas" style="display:none"></canvas>
+          <div id="img-btns" style="display:none;margin-top:10px">
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" onclick="runScan()" style="flex:1;width:auto">🔍 Scan LJK</button>
+              <button class="btn btn-ghost btn-sm" onclick="resetImg()">🔄 Ulangi</button>
+            </div>
+            <div id="scan-log"></div>
+          </div>
+        </div>
+
+        <div class="card" id="card-detected" style="display:none">
+          <h2>✅ Jawaban Terdeteksi</h2>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;display:flex;gap:14px;flex-wrap:wrap">
+            <span><span style="display:inline-block;width:11px;height:11px;background:var(--green);border-radius:50%;vertical-align:middle;margin-right:3px"></span>Benar</span>
+            <span><span style="display:inline-block;width:11px;height:11px;background:var(--red);border-radius:50%;vertical-align:middle;margin-right:3px"></span>Salah</span>
+            <span><span style="display:inline-block;width:11px;height:11px;background:rgba(16,185,129,.2);border:2px solid var(--green);border-radius:50%;vertical-align:middle;margin-right:3px"></span>Kunci (tidak diisi)</span>
+          </div>
+          <div class="answer-grid" id="res-grid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAGE REPORT -->
+  <div id="page-report" style="display:none">
+    <div class="stat-grid" id="rpt-stats"></div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px" id="rpt-filters"></div>
+    <div class="card" style="overflow-x:auto;padding:0">
+      <table class="tbl">
+        <thead><tr><th>#</th><th>Nama</th><th>Kelas</th><th>Mapel</th><th>Benar</th><th>Total</th><th>Skor</th><th>Status</th><th>Tanggal</th></tr></thead>
+        <tbody id="rpt-body"></tbody>
+      </table>
+      <div id="rpt-empty" style="display:none;text-align:center;padding:48px;color:var(--muted)">
+        <div style="font-size:36px;margin-bottom:10px">📭</div>Belum ada data hasil scan
+      </div>
+    </div>
+  </div>
+
+  <!-- PAGE SETTINGS -->
+  <div id="page-settings" style="display:none">
+    <div class="row">
+      <div class="col-300">
+        <div class="card">
+          <h2>☁ Google Sheets</h2>
+          <div style="font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:16px">
+            Hasil scan otomatis terkirim ke Google Sheets via Apps Script setiap klik Simpan Hasil.
+          </div>
+          <label>Apps Script Web App URL</label>
+          <input id="gs-url" placeholder="https://script.google.com/macros/s/..." style="margin-bottom:10px"/>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.6">
+            💡 Dapatkan URL ini setelah deploy Apps Script sebagai Web App.
+          </div>
+          <button class="btn btn-primary" onclick="saveGsUrl()" style="margin-bottom:8px">💾 Simpan URL</button>
+          <button class="btn btn-ghost btn-sm" onclick="testGs()" style="width:100%">🧪 Test Koneksi</button>
+          <div id="gs-test-result" style="margin-top:10px;font-size:12px;display:none;padding:10px;border-radius:8px"></div>
+        </div>
+
+        <div class="card">
+          <h2>🔑 Ubah Password Admin</h2>
+          <div style="font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:14px">
+            Ganti username dan password login administrator.
+          </div>
+          <label>Username Baru</label>
+          <input id="new-user" placeholder="Username baru" style="margin-bottom:10px" autocomplete="off"/>
+          <label>Password Baru</label>
+          <input id="new-pass" type="password" placeholder="Min. 6 karakter" style="margin-bottom:10px"/>
+          <label>Konfirmasi Password</label>
+          <input id="new-pass2" type="password" placeholder="Ulangi password baru" style="margin-bottom:14px"/>
+          <button class="btn btn-primary" onclick="changeAdminPass()">🔒 Simpan Kredensial Baru</button>
+          <div id="pass-result" style="margin-top:10px;font-size:12px;display:none;padding:9px 13px;border-radius:8px"></div>
+        </div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:14px">
+            Data tersimpan di <strong style="color:var(--fg)">LocalStorage</strong> browser — tetap ada setelah refresh, hilang jika cache browser dihapus.
+          </div>
+          <div id="storage-info" style="font-size:12px;background:var(--bg);border-radius:9px;padding:12px;margin-bottom:14px;line-height:1.8"></div>
+          <button class="btn btn-ghost btn-sm" onclick="exportJSON()" style="width:100%;margin-bottom:8px">📤 Export Backup JSON</button>
+          <button class="btn btn-ghost btn-sm" onclick="G('imp-file').click()" style="width:100%;margin-bottom:8px">📥 Import Backup JSON</button>
+          <input id="imp-file" type="file" accept=".json" style="display:none" onchange="importJSON(event)"/>
+          <button class="btn btn-sm btn-danger" onclick="clearAll()" style="width:100%">🗑 Hapus Semua Data</button>
+        </div>
+      </div>
+
+      <div class="col-flex">
+        <div class="card">
+          <h2>📖 Panduan Setup Google Sheets</h2>
+          <div style="font-size:13px;line-height:1.85;color:var(--fg)">
+            <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:12px;border-left:3px solid var(--accent)">
+              <strong style="color:var(--accent)">① Buat Google Spreadsheet baru</strong><br>
+              Buka <a href="https://sheets.google.com" target="_blank" style="color:var(--accent)">sheets.google.com</a> → buat spreadsheet baru.<br>
+              Ganti nama Sheet1 menjadi: <code style="background:#252a3a;padding:2px 7px;border-radius:4px;font-size:11.5px">Hasil LJK</code>
+            </div>
+            <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:12px;border-left:3px solid var(--accent)">
+              <strong style="color:var(--accent)">② Buka Apps Script</strong><br>
+              Di spreadsheet → menu <strong>Extensions → Apps Script</strong>.<br>
+              Hapus kode default, lalu paste isi file <code style="background:#252a3a;padding:2px 7px;border-radius:4px;font-size:11.5px">ljk-apps-script.gs</code>.
+            </div>
+            <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:12px;border-left:3px solid var(--accent)">
+              <strong style="color:var(--accent)">③ Deploy sebagai Web App</strong><br>
+              Klik <strong>Deploy → New deployment</strong><br>
+              &nbsp;&nbsp;• Type: <strong>Web app</strong><br>
+              &nbsp;&nbsp;• Execute as: <strong>Me</strong><br>
+              &nbsp;&nbsp;• Who has access: <strong>Anyone</strong><br>
+              → Klik Deploy → izinkan akses → copy URL.
+            </div>
+            <div style="background:var(--bg);border-radius:10px;padding:14px;border-left:3px solid var(--green)">
+              <strong style="color:var(--green)">④ Hubungkan ke LJK Scanner</strong><br>
+              Paste URL di kolom sebelah kiri → Simpan URL → Test Koneksi.<br>
+              Selesai! Setiap klik <strong>💾 Simpan Hasil</strong> otomatis terkirim ke Sheets. ✅
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>📊 Struktur Kolom Google Sheets</h2>
+          <div style="overflow-x:auto">
+            <table class="tbl">
+              <thead><tr><th>Kolom</th><th>Isi Data</th><th>Contoh</th></tr></thead>
+              <tbody>
+                <tr><td><strong>A</strong></td><td>Timestamp</td><td>2024-06-15 10:30:00</td></tr>
+                <tr><td><strong>B</strong></td><td>Nama Siswa</td><td>Ahmad Fauzi</td></tr>
+                <tr><td><strong>C</strong></td><td>Kelas</td><td>X IPA 1</td></tr>
+                <tr><td><strong>D</strong></td><td>Mata Pelajaran</td><td>Matematika</td></tr>
+                <tr><td><strong>E</strong></td><td>Jumlah Benar</td><td>18</td></tr>
+                <tr><td><strong>F</strong></td><td>Total Soal</td><td>20</td></tr>
+                <tr><td><strong>G</strong></td><td>Skor (0–100)</td><td>90</td></tr>
+                <tr><td><strong>H</strong></td><td>Status Kelulusan</td><td>LULUS</td></tr>
+                <tr><td><strong>I</strong></td><td>Jawaban Siswa</td><td>A,B,C,D,A,...</td></tr>
+                <tr><td><strong>J</strong></td><td>Kunci Jawaban</td><td>A,B,C,D,A,...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /app -->
+
+<script>
+// ═══════════════════════════════════════════════
+// STATE & UTILS
+// ═══════════════════════════════════════════════
+const LTRS={3:['A','B','C'],4:['A','B','C','D'],5:['A','B','C','D','E']};
+let selTpl=null,detAns=null,camStream=null;
+let cQ=20,cA=4,keyAns=Array(20).fill(null);
+
+// Load from localStorage on boot
+let templates = JSON.parse(localStorage.getItem('ljk_templates')||'[]');
+let results   = JSON.parse(localStorage.getItem('ljk_results')||'[]');
+let gsUrl     = localStorage.getItem('ljk_gs_url')||'';
+let isAdmin   = false; // runtime only, never persisted
+
+const G=id=>document.getElementById(id);
+function chunk(a,n){const r=[];for(let i=0;i<a.length;i+=n)r.push(a.slice(i,i+n));return r;}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function showOv(t,s){G('ov-title').textContent=t;G('ov-sub').textContent=s;G('overlay').classList.add('on');}
+function hideOv(){G('overlay').classList.remove('on');}
+function addLog(m){const e=G('scan-log');e.innerHTML+=m+'<br>';e.scrollTop=e.scrollHeight;}
+
+function persist(){
+  localStorage.setItem('ljk_templates',JSON.stringify(templates));
+  localStorage.setItem('ljk_results',JSON.stringify(results));
+}
+
+function badges(){
+  G('bdg-tpl').textContent=templates.length+' Template';
+  G('bdg-res').textContent=results.length+' Hasil';
+}
+
+// ── Tombol tersembunyi: klik titik 3× dalam 2 detik → buka login ──
+let _tapCount=0, _tapTimer=null;
+function handleSecretTap(){
+  _tapCount++;
+  clearTimeout(_tapTimer);
+  // Visual feedback samar saat diklik
+  const dot=G('secret-dot');
+  dot.style.opacity='0.7';
+  setTimeout(()=>dot.style.opacity='0.35',300);
+  if(_tapCount>=3){
+    _tapCount=0;
+    adminGate('settings');
+    return;
+  }
+  _tapTimer=setTimeout(()=>{ _tapCount=0; },2000);
+}
+
+// ═══════════════════════════════════════════════
+// NAV
+// ═══════════════════════════════════════════════
+function showPage(p){
+  // Guard: settings only for admin
+  if(p==='settings' && !isAdmin){ openLoginModal(); return; }
+  ['create','scan','report','settings'].forEach(id=>{
+    G('page-'+id).style.display=id===p?'block':'none';
+    G('nav-'+id).classList.toggle('active',id===p);
+  });
+  if(p==='scan')renderTplList();
+  if(p==='report')renderReport('all');
+  if(p==='settings')initSettings();
+}
+
+// Gate: tries to go to a page, shows login if not admin
+function adminGate(page){ isAdmin ? showPage(page) : openLoginModal(page); }
+
+// ═══════════════════════════════════════════════
+// ADMIN AUTH
+// ═══════════════════════════════════════════════
+
+// Kredensial admin — hash SHA-256 disimpan di localStorage saat pertama kali setup.
+// Default pertama kali: username=admin, password=admin123
+// Admin bisa ganti password dari halaman Pengaturan.
+const DEFAULT_HASH_USER = 'admin';
+const DEFAULT_HASH_PASS = '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9'; // admin123
+
+let _loginTarget = 'settings'; // halaman tujuan setelah login
+
+function openLoginModal(target){
+  _loginTarget = target || 'settings';
+  G('login-user').value='';
+  G('login-pass').value='';
+  G('login-err').style.display='none';
+  G('login-modal').classList.add('on');
+  setTimeout(()=>G('login-user').focus(),120);
+}
+
+function closeLoginModal(){
+  G('login-modal').classList.remove('on');
+}
+
+function toggleEye(){
+  const inp=G('login-pass');
+  inp.type=inp.type==='password'?'text':'password';
+  G('eye-btn').textContent=inp.type==='password'?'👁':'🙈';
+}
+
+async function sha256(str){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+async function doLogin(){
+  const user=G('login-user').value.trim();
+  const pass=G('login-pass').value;
+  if(!user||!pass){G('login-err').textContent='⚠ Username dan password wajib diisi.';G('login-err').style.display='block';return;}
+
+  const storedUser = localStorage.getItem('ljk_admin_user') || DEFAULT_HASH_USER;
+  const storedHash = localStorage.getItem('ljk_admin_hash') || DEFAULT_HASH_PASS;
+  const passHash   = await sha256(pass);
+
+  if(user === storedUser && passHash === storedHash){
+    isAdmin = true;
+    closeLoginModal();
+    updateAdminUI();
+    showPage(_loginTarget);
+    showToast('✅ Login berhasil! Selamat datang, Admin.','var(--green)');
+  } else {
+    G('login-err').textContent='❌ Username atau password salah.';
+    G('login-err').style.display='block';
+    G('login-pass').value='';
+    G('login-pass').focus();
+  }
+}
+
+function adminLogout(){
+  if(!confirm('Keluar dari sesi Admin?')) return;
+  isAdmin=false;
+  updateAdminUI();
+  showPage('create');
+  showToast('👋 Sesi admin diakhiri.','var(--yellow)');
+}
+
+function updateAdminUI(){
+  // Tampilkan/sembunyikan tab Pengaturan
+  G('nav-settings').style.display = isAdmin ? 'flex' : 'none';
+  // Saat admin login: tampilkan chip logout kecil di header
+  // Saat bukan admin: kosong
+  G('admin-chip-wrap').innerHTML = isAdmin
+    ? `<div class="admin-chip" onclick="adminLogout()" title="Sesi Admin aktif — klik untuk logout">⚙ Admin <span style="font-size:9px;opacity:.65;margin-left:2px">✕</span></div>`
+    : '';
+}
+
+// ═══════════════════════════════════════════════
+// CREATE
+// ═══════════════════════════════════════════════
+function pickQ(b){G('chips-q').querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));b.classList.add('active');cQ=+b.dataset.v;keyAns=Array(cQ).fill(null);renderKeyGrid();renderPreview();}
+function pickA(b){G('chips-a').querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));b.classList.add('active');cA=+b.dataset.v;keyAns=Array(cQ).fill(null);renderKeyGrid();renderPreview();}
+
+function renderKeyGrid(){
+  const ltrs=LTRS[cA],cols=chunk(Array.from({length:cQ},(_,i)=>i),10),grid=G('key-grid');
+  grid.innerHTML='';
+  cols.forEach(col=>{
+    const cd=document.createElement('div');cd.className='answer-col';
+    col.forEach(idx=>{
+      const row=document.createElement('div');row.className='answer-row';
+      row.innerHTML=`<span class="ans-num">${idx+1}.</span>`;
+      ltrs.forEach(l=>{
+        const b=document.createElement('button');
+        b.className='bbl'+(keyAns[idx]===l?' sel':'');
+        b.textContent=l;
+        b.onclick=()=>{keyAns[idx]=keyAns[idx]===l?null:l;renderKeyGrid();renderPreview();};
+        row.appendChild(b);
+      });
+      cd.appendChild(row);
+    });
+    grid.appendChild(cd);
+  });
+}
+
+function renderPreview(){
+  const subj=G('cfg-subj').value||'—',ltrs=LTRS[cA];
+  const cols=chunk(Array.from({length:cQ},(_,i)=>i),10);
+  let h=`<div style="border-bottom:2px solid #111;padding-bottom:10px;margin-bottom:12px">
+    <div style="font-size:15px;font-weight:700;text-align:center;letter-spacing:2px">LEMBAR JAWABAN KOMPUTER (LJK)</div>
+    <div style="text-align:center;font-size:12px;margin-top:3px;color:#555">${subj}</div></div>
+  <div style="display:flex;justify-content:space-between;margin-bottom:12px;font-size:10.5px">
+    <div><div style="margin-bottom:6px">Nama &nbsp;: <span style="display:inline-block;width:150px;border-bottom:1px solid #888">&nbsp;</span></div>
+    <div>Kelas &nbsp;: <span style="display:inline-block;width:150px;border-bottom:1px solid #888">&nbsp;</span></div></div>
+    <div style="color:#777;font-size:9.5px;text-align:right">Soal: ${cQ}<br>Pilihan: ${ltrs.join(', ')}</div>
+  </div>
+  <div style="border-top:1px dashed #bbb;margin-bottom:9px"></div>
+  <div style="font-size:9px;color:#777;margin-bottom:11px">Petunjuk: Hitamkan/lingkari bulatan huruf jawaban yang benar dengan jelas dan penuh.</div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap">`;
+  cols.forEach(col=>{
+    h+=`<div>`;
+    col.forEach(idx=>{
+      h+=`<div style="display:flex;align-items:center;gap:3px;margin-bottom:4px;font-size:9.5px"><span style="width:19px;text-align:right;font-weight:700">${idx+1}.</span>`;
+      ltrs.forEach(l=>{
+        const s=keyAns[idx]===l;
+        h+=`<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1.5px solid ${s?'#e63946':'#999'};background:${s?'#e63946':'transparent'};color:${s?'#fff':'#444'};font-size:7.5px;font-weight:${s?700:400}">${l}</span>`;
+      });
+      h+=`</div>`;
+    });
+    h+=`</div>`;
+  });
+  h+=`</div><div style="border-top:1px dashed #bbb;margin-top:12px;padding-top:7px;font-size:8.5px;color:#ccc;text-align:center">LJK Scanner &copy; ${new Date().getFullYear()}</div>`;
+  G('ljk-preview').innerHTML=h;
+}
+
+function saveTemplate(){
+  const subj=G('cfg-subj').value.trim();
+  if(!subj)return alert('Isi nama mata pelajaran!');
+  if(!keyAns.some(a=>a!==null))return alert('Isi kunci jawaban minimal 1 soal!');
+  templates.push({id:Date.now(),subject:subj,questionCount:cQ,answerType:cA,answers:[...keyAns]});
+  persist(); badges();
+  alert(`✅ Template "${subj}" (${cQ} soal) berhasil disimpan!`);
+}
+
+// ═══════════════════════════════════════════════
+// EXPORT LJK – PNG & PDF
+// ═══════════════════════════════════════════════
+
+// Buat elemen LJK full-size (A4 px) tersembunyi untuk di-render
+function buildExportNode(showKey){
+  const subj = G('cfg-subj').value || '—';
+  const ltrs = LTRS[cA];
+  const cols = chunk(Array.from({length:cQ},(_,i)=>i), 10);
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = [
+    'position:absolute','left:-9999px','top:0',
+    'width:794px','min-height:1123px',        // A4 96dpi
+    'background:#ffffff','color:#111',
+    'font-family:"Space Mono",monospace',
+    'font-size:11px','padding:28px 32px',
+    'box-sizing:border-box','line-height:1.4'
+  ].join(';');
+
+  // ── judul ──
+  wrap.innerHTML = `
+  <div style="border-bottom:2.5px solid #111;padding-bottom:11px;margin-bottom:14px">
+    <div style="font-size:17px;font-weight:700;text-align:center;letter-spacing:2.5px">LEMBAR JAWABAN KOMPUTER (LJK)</div>
+    <div style="text-align:center;font-size:13px;margin-top:4px;color:#444">${subj}</div>
+  </div>
+  <div style="display:flex;justify-content:space-between;margin-bottom:13px;font-size:11px">
+    <div>
+      <div style="margin-bottom:7px">Nama &nbsp;: <span style="display:inline-block;width:200px;border-bottom:1px solid #777">&nbsp;</span></div>
+      <div>Kelas &nbsp;&nbsp;: <span style="display:inline-block;width:200px;border-bottom:1px solid #777">&nbsp;</span></div>
+    </div>
+    <div style="font-size:10px;color:#666;text-align:right">
+      Jumlah Soal: ${cQ}<br>
+      Pilihan Jawaban: ${ltrs.join(', ')}<br>
+      Tanggal: _______________
+    </div>
+  </div>
+  <div style="border-top:1px dashed #bbb;margin-bottom:10px"></div>
+  <div style="font-size:9.5px;color:#666;margin-bottom:13px">
+    Petunjuk: Hitamkan/lingkari bulatan huruf jawaban yang benar dengan jelas dan penuh menggunakan pensil/pena hitam.
+  </div>
+  <div id="exp-grid" style="display:flex;gap:0;flex-wrap:nowrap;justify-content:space-between"></div>
+  <div style="border-top:1px dashed #bbb;margin-top:14px;padding-top:8px;font-size:9px;color:#bbb;text-align:center">
+    LJK Scanner &copy; ${new Date().getFullYear()} &nbsp;·&nbsp; Dilarang menyalin jawaban
+  </div>`;
+
+  // ── grid soal ──
+  const grid = wrap.querySelector('#exp-grid');
+  const colW = Math.floor(730 / cols.length);
+
+  cols.forEach(col => {
+    const cd = document.createElement('div');
+    cd.style.cssText = `width:${colW}px;flex-shrink:0`;
+    col.forEach(idx => {
+      const n = idx + 1;
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:3px;margin-bottom:5px;font-size:10.5px';
+      row.innerHTML = `<span style="width:22px;text-align:right;font-weight:700;font-size:10px">${n}.</span>`;
+      ltrs.forEach(l => {
+        const isKey = showKey && keyAns[idx] === l;
+        const sp = document.createElement('span');
+        sp.style.cssText = [
+          'display:inline-flex','align-items:center','justify-content:center',
+          'width:16px','height:16px','border-radius:50%',
+          `border:1.5px solid ${isKey ? '#c0392b' : '#888'}`,
+          `background:${isKey ? '#c0392b' : 'transparent'}`,
+          `color:${isKey ? '#fff' : '#333'}`,
+          'font-size:8px',`font-weight:${isKey ? 700 : 400}`
+        ].join(';');
+        sp.textContent = l;
+        row.appendChild(sp);
+      });
+      cd.appendChild(row);
+    });
+    grid.appendChild(cd);
+  });
+
+  document.body.appendChild(wrap);
+  return wrap;
+}
+
+function setExportBtns(disabled, msg=''){
+  G('btn-export-pdf').disabled = disabled;
+  G('btn-export-png').disabled = disabled;
+  G('export-status').textContent = msg;
+}
+
+async function captureNode(node, scale=2){
+  return await html2canvas(node, {
+    scale, useCORS:true, allowTaint:true,
+    backgroundColor:'#ffffff',
+    logging:false,
+    width:794, windowWidth:794
+  });
+}
+
+async function exportPNG(){
+  if(!G('cfg-subj').value.trim()) return alert('Isi nama mata pelajaran dulu!');
+  setExportBtns(true,'⏳ Membuat PNG...');
+  const showKey = G('exp-key').checked;
+  const copies  = G('exp-copies').checked;
+  const subj    = G('cfg-subj').value.trim() || 'LJK';
+
+  try{
+    const node = buildExportNode(showKey);
+    await new Promise(r=>setTimeout(r,80)); // let DOM paint
+    const canvas = await captureNode(node, 2);
+    node.remove();
+
+    if(copies){
+      // Stack dua kopian vertikal dalam satu canvas
+      const out = document.createElement('canvas');
+      out.width  = canvas.width;
+      out.height = canvas.height * 2 + 20;
+      const ctx  = out.getContext('2d');
+      ctx.fillStyle='#fff'; ctx.fillRect(0,0,out.width,out.height);
+      ctx.drawImage(canvas,0,0);
+      ctx.drawImage(canvas,0,canvas.height+20);
+      const a=document.createElement('a');
+      a.download=`LJK-${subj}-2x.png`;
+      a.href=out.toDataURL('image/png');
+      a.click();
+    } else {
+      const a=document.createElement('a');
+      a.download=`LJK-${subj}.png`;
+      a.href=canvas.toDataURL('image/png');
+      a.click();
+    }
+    setExportBtns(false,'✅ PNG berhasil diunduh!');
+    setTimeout(()=>setExportBtns(false,''),3000);
+  }catch(e){
+    setExportBtns(false,'❌ Gagal: '+e.message);
+    console.error(e);
+  }
+}
+
+async function exportPDF(){
+  if(!G('cfg-subj').value.trim()) return alert('Isi nama mata pelajaran dulu!');
+  if(typeof jspdf === 'undefined' && typeof window.jspdf === 'undefined'){
+    return alert('Library jsPDF belum termuat. Cek koneksi internet lalu refresh.');
+  }
+  setExportBtns(true,'⏳ Membuat PDF...');
+  const showKey = G('exp-key').checked;
+  const copies  = G('exp-copies').checked;
+  const subj    = G('cfg-subj').value.trim() || 'LJK';
+  const { jsPDF } = window.jspdf;
+
+  try{
+    const node = buildExportNode(showKey);
+    await new Promise(r=>setTimeout(r,80));
+    const canvas = await captureNode(node, 2);
+    node.remove();
+
+    const imgW = 210;  // A4 mm
+    const imgH = Math.round(canvas.height / canvas.width * imgW);
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+
+    if(copies){
+      // 2 LJK dalam 1 halaman A4 landscape atau 2 halaman
+      const pdf = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
+      pdf.addImage(imgData,'JPEG', 0, 0, imgW, imgH);
+      pdf.addPage();
+      pdf.addImage(imgData,'JPEG', 0, 0, imgW, imgH);
+      pdf.save(`LJK-${subj}-2x.pdf`);
+    } else {
+      const pdf = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
+      pdf.addImage(imgData,'JPEG', 0, 0, imgW, Math.min(imgH, 297));
+      pdf.save(`LJK-${subj}.pdf`);
+    }
+    setExportBtns(false,'✅ PDF berhasil diunduh!');
+    setTimeout(()=>setExportBtns(false,''),3000);
+  }catch(e){
+    setExportBtns(false,'❌ Gagal: '+e.message);
+    console.error(e);
+  }
+}
+
+renderKeyGrid();renderPreview();
+
+let rF='all';
+// ═══════════════════════════════════════════════
+function renderTplList(){
+  const el=G('tpl-list');
+  if(!templates.length){el.innerHTML='<p style="font-size:12px;color:var(--muted)">Belum ada template. Buat dulu di tab Buat LJK.</p>';return;}
+  el.innerHTML=templates.map(t=>`<button onclick="pickTpl(${t.id})" style="width:100%;padding:9px 13px;border-radius:10px;border:2px solid ${selTpl===t.id?'var(--accent)':'var(--border)'};background:${selTpl===t.id?'var(--accent-dim)':'var(--bg)'};color:var(--fg);text-align:left;margin-bottom:7px">
+    <div style="font-weight:700;font-size:13px">${t.subject}</div>
+    <div style="font-size:10.5px;color:var(--muted)">${t.questionCount} soal · ${LTRS[t.answerType].join('-')}</div>
+  </button>`).join('');
+}
+function pickTpl(id){selTpl=id;renderTplList();}
+
+async function openCam(){
+  try{
+    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}}});
+    G('cam-vid').srcObject=camStream;
+    G('cam-box').style.display='block';
+    G('debug-canvas').style.display='none';
+    G('img-btns').style.display='none';
+  }catch(e){alert('Kamera tidak dapat diakses: '+e.message);}
+}
+function stopCam(){if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}G('cam-box').style.display='none';}
+function snapPhoto(){
+  const v=G('cam-vid'),sc=G('src-canvas');
+  sc.width=v.videoWidth;sc.height=v.videoHeight;
+  sc.getContext('2d').drawImage(v,0,0);
+  stopCam();showImg();
+}
+function loadFile(e){
+  const f=e.target.files[0];if(!f)return;
+  const fr=new FileReader();
+  fr.onload=ev=>{const img=new Image();img.onload=()=>{const sc=G('src-canvas');sc.width=img.width;sc.height=img.height;sc.getContext('2d').drawImage(img,0,0);showImg();};img.src=ev.target.result;};
+  fr.readAsDataURL(f);
+}
+function showImg(){
+  const sc=G('src-canvas'),dc=G('debug-canvas');
+  dc.width=sc.width;dc.height=sc.height;
+  dc.getContext('2d').drawImage(sc,0,0);
+  dc.style.display='block';
+  G('img-btns').style.display='block';
+  G('scan-log').innerHTML='';
+  G('card-stats').style.display='none';
+  G('card-detected').style.display='none';
+  detAns=null;
+}
+function resetImg(){
+  G('debug-canvas').style.display='none';
+  G('img-btns').style.display='none';
+  G('card-stats').style.display='none';
+  G('card-detected').style.display='none';
+  G('file-in').value='';detAns=null;
+}
+
+// ═══════════════════════════════════════════════
+// SAMPLE LJK GENERATOR
+// ═══════════════════════════════════════════════
+function makeSample(){
+  if(!selTpl)return alert('Pilih template dulu!');
+  const tpl=templates.find(t=>t.id===selTpl),ltrs=LTRS[tpl.answerType];
+  const W=820,H=1120,sc=G('src-canvas');
+  sc.width=W;sc.height=H;
+  const ctx=sc.getContext('2d');
+
+  // Background
+  ctx.fillStyle='#f9f9f7';ctx.fillRect(0,0,W,H);
+  // noise
+  for(let i=0;i<1500;i++){ctx.fillStyle=`rgba(0,0,0,${Math.random()*.025})`;ctx.fillRect(Math.random()*W,Math.random()*H,2,2);}
+
+  // Header
+  ctx.fillStyle='#111';ctx.font='bold 19px monospace';ctx.textAlign='center';
+  ctx.fillText('LEMBAR JAWABAN KOMPUTER (LJK)',W/2,52);
+  ctx.font='13px monospace';ctx.fillText(tpl.subject,W/2,74);
+  ctx.textAlign='left';
+  ctx.beginPath();ctx.moveTo(30,84);ctx.lineTo(W-30,84);ctx.lineWidth=2;ctx.strokeStyle='#222';ctx.stroke();
+
+  ctx.font='12px monospace';ctx.fillStyle='#333';
+  ctx.fillText('Nama : ____________________________',38,112);
+  ctx.fillText('Kelas : ________________',38,136);
+
+  ctx.setLineDash([4,4]);
+  ctx.beginPath();ctx.moveTo(30,152);ctx.lineTo(W-30,152);ctx.lineWidth=1;ctx.strokeStyle='#aaa';ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.font='10px monospace';ctx.fillStyle='#777';
+  ctx.fillText('Petunjuk: Hitamkan bulatan jawaban yang benar dengan pensil/pena.',38,170);
+
+  const cols=chunk(Array.from({length:tpl.questionCount},(_,i)=>i),10);
+  const gx=38,gy=196,colW=Math.floor((W-gx*2)/cols.length),rowH=40,R=12;
+
+  cols.forEach((col,ci)=>{
+    col.forEach((idx,ri)=>{
+      const bx=gx+ci*colW,by=gy+ri*rowH;
+      ctx.font='bold 10px monospace';ctx.fillStyle='#111';ctx.textAlign='left';
+      ctx.fillText(`${idx+1}.`,bx,by+5);
+      ltrs.forEach((l,li)=>{
+        const cx=bx+28+li*28,cy=by;
+        const filled=tpl.answers[idx]===l&&Math.random()>.07;
+        ctx.beginPath();ctx.arc(cx,cy,R,0,Math.PI*2);
+        if(filled){
+          ctx.fillStyle='#1a1a1a';ctx.fill();
+          ctx.fillStyle='#fff';ctx.font='bold 8.5px monospace';ctx.textAlign='center';
+          ctx.fillText(l,cx,cy+3);
+        } else {
+          ctx.strokeStyle='#888';ctx.lineWidth=1.5;ctx.stroke();
+          ctx.fillStyle='#666';ctx.font='8.5px monospace';ctx.textAlign='center';
+          ctx.fillText(l,cx,cy+3);
+        }
+      });
+    });
+  });
+
+  showImg();
+  addLog('🧪 Sampel LJK siap. Tekan "Scan LJK".');
+}
+
+// ═══════════════════════════════════════════════
+// MAIN SCAN RUNNER
+// ═══════════════════════════════════════════════
+async function runScan(){
+  if(!selTpl)return alert('Pilih template dulu!');
+  const sc=G('src-canvas');
+  if(!sc.width)return alert('Ambil/upload foto LJK dulu!');
+  const tpl=templates.find(t=>t.id===selTpl);
+  showOv('Memproses gambar...','Mendeteksi bubble jawaban');
+  G('scan-log').innerHTML='';
+  await sleep(60);
+  try{
+    detAns=await processImage(sc,tpl);
+    hideOv();
+    renderResult(tpl);
+  }catch(e){hideOv();console.error(e);alert('Gagal memproses: '+e.message);}
+}
+
+// ═══════════════════════════════════════════════
+// PURE JS IMAGE PROCESSING
+// ═══════════════════════════════════════════════
+async function processImage(srcCanvas,tpl){
+  const W=srcCanvas.width,H=srcCanvas.height;
+  const ltrs=LTRS[tpl.answerType];
+  addLog(`📐 Gambar: ${W}×${H} | Soal: ${tpl.questionCount} | Opsi: ${ltrs.join('')}`);
+
+  // 1. Baca piksel
+  const rawData=srcCanvas.getContext('2d').getImageData(0,0,W,H).data;
+
+  // 2. Grayscale (luma formula)
+  const gray=new Uint8Array(W*H);
+  for(let i=0;i<W*H;i++){const p=i*4;gray[i]=Math.round(.299*rawData[p]+.587*rawData[p+1]+.114*rawData[p+2]);}
+  addLog('🔲 Grayscale: OK');
+
+  // 3. Gaussian blur 5×5 (2 pass box blur untuk efisiensi)
+  const blurred=boxBlur(boxBlur(gray,W,H,2),W,H,2);
+  addLog('〰 Gaussian blur: OK');
+
+  // 4. Adaptive threshold – tahan pencahayaan tidak merata
+  const bw=adaptiveThresh(blurred,W,H,31,9);
+  addLog('⬛ Adaptive threshold: OK');
+
+  // 5. Connected component labeling (blob detection)
+  const blobs=connectedComponents(bw,W,H);
+  addLog(`🔵 Total blob: ${blobs.length}`);
+
+  // 6. Filter blob yang bentuknya seperti lingkaran
+  const minR=Math.min(W,H)*.004, maxR=Math.min(W,H)*.055;
+  const circles=blobs.filter(b=>{
+    const ar=b.w/b.h;
+    if(ar<.4||ar>2.5)return false;
+    if(b.w<minR*2||b.w>maxR*2)return false;
+    const r=(b.w+b.h)/4;
+    const expected=Math.PI*r*r;
+    const fill=b.area/expected;
+    return fill>.3&&fill<1.5;
+  }).map(b=>({x:b.cx,y:b.cy,r:(b.w+b.h)/4}));
+
+  addLog(`⭕ Bubble kandidat: ${circles.length}`);
+
+  // 7. Clustering baris berdasarkan posisi Y
+  const epsY=Math.min(W,H)*.022;
+  const rows=clusterY(circles,epsY);
+  addLog(`📊 Baris: ${rows.length} | Butuh: ${tpl.questionCount}`);
+
+  // 8. Gambar overlay pada debug canvas
+  const dc=G('debug-canvas');
+  dc.width=W;dc.height=H;
+  const dctx=dc.getContext('2d');
+  dctx.drawImage(srcCanvas,0,0);
+
+  // lingkaran biru semua kandidat
+  dctx.strokeStyle='rgba(79,142,247,0.55)';dctx.lineWidth=1.5;
+  circles.forEach(c=>{dctx.beginPath();dctx.arc(c.x,c.y,c.r+2,0,Math.PI*2);dctx.stroke();});
+
+  // 9. Untuk setiap baris valid, tentukan bubble yang diisi
+  const detected=Array(tpl.questionCount).fill(null);
+  const validRows=rows.filter(r=>r.length>=ltrs.length).slice(0,tpl.questionCount);
+  addLog(`✅ Baris valid: ${validRows.length}/${tpl.questionCount}`);
+
+  validRows.forEach((row,qi)=>{
+    if(qi>=tpl.questionCount)return;
+    row.sort((a,b)=>a.x-b.x);
+    const bubbles=row.slice(-ltrs.length);
+    if(bubbles.length<ltrs.length)return;
+
+    // Hitung kecerahan rata-rata dalam setiap bubble dari grayscale ASLI
+    const brights=bubbles.map(c=>avgBright(gray,W,H,c.x,c.y,c.r*.75));
+    const minB=Math.min(...brights),maxB=Math.max(...brights);
+    const contrast=maxB-minB;
+    const minIdx=brights.indexOf(minB);
+
+    // Bubble paling gelap dengan kontras cukup = jawaban siswa
+    if(contrast>15&&minB<210&&minIdx>=0&&minIdx<ltrs.length){
+      detected[qi]=ltrs[minIdx];
+      const dc2=bubbles[minIdx];
+      // lingkaran hijau
+      dctx.beginPath();dctx.arc(dc2.x,dc2.y,dc2.r+5,0,Math.PI*2);
+      dctx.strokeStyle='#10b981';dctx.lineWidth=3;dctx.stroke();
+      // label huruf
+      const fs=Math.max(10,dc2.r*.9);
+      dctx.fillStyle='#10b981';dctx.font=`bold ${fs}px monospace`;dctx.textAlign='center';
+      dctx.fillText(ltrs[minIdx],dc2.x,dc2.y-dc2.r-4);dctx.textAlign='left';
+    } else {
+      // tandai kuning = tidak yakin
+      dctx.beginPath();dctx.arc(bubbles[0].x,bubbles[0].y,(bubbles[0].r||10)+4,0,Math.PI*2);
+      dctx.strokeStyle='#f59e0b';dctx.lineWidth=2;dctx.stroke();
+    }
+  });
+
+  const cnt=detected.filter(a=>a!==null).length;
+  addLog(`🏁 Terdeteksi: ${cnt}/${tpl.questionCount}`);
+  if(cnt<tpl.questionCount*.4)addLog('💡 Tips: foto tegak lurus, cahaya merata, isian penuh/gelap.');
+  return detected;
+}
+
+// ── Box blur (horizontal + vertical pass) ──────────────────────────
+function boxBlur(g,W,H,r){
+  const tmp=new Uint8Array(W*H),out=new Uint8Array(W*H);
+  for(let y=0;y<H;y++){let s=0,c=0;
+    for(let dx=-r;dx<=r;dx++){const nx=dx;if(nx>=0&&nx<W){s+=g[y*W+nx];c++;}}
+    tmp[y*W]=s/c;
+    for(let x=1;x<W;x++){
+      const add=x+r<W?g[y*W+x+r]:0,rem=x-r-1>=0?g[y*W+x-r-1]:0;
+      if(x+r<W)c++;if(x-r-1>=0)c--;s+=add-rem;tmp[y*W+x]=s/c;
+    }
+  }
+  for(let x=0;x<W;x++){let s=0,c=0;
+    for(let dy=-r;dy<=r;dy++){const ny=dy;if(ny>=0&&ny<H){s+=tmp[ny*W+x];c++;}}
+    out[x]=s/c;
+    for(let y=1;y<H;y++){
+      const add=y+r<H?tmp[(y+r)*W+x]:0,rem=y-r-1>=0?tmp[(y-r-1)*W+x]:0;
+      if(y+r<H)c++;if(y-r-1>=0)c--;s+=add-rem;out[y*W+x]=s/c;
+    }
+  }
+  return out;
+}
+
+// ── Adaptive threshold (integral image) ────────────────────────────
+function adaptiveThresh(g,W,H,blockSize,C){
+  const half=Math.floor(blockSize/2);
+  const out=new Uint8Array(W*H);
+  const ii=new Float64Array((W+1)*(H+1));
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++)
+    ii[(y+1)*(W+1)+(x+1)]=g[y*W+x]+ii[y*(W+1)+(x+1)]+ii[(y+1)*(W+1)+x]-ii[y*(W+1)+x];
+  for(let y=0;y<H;y++){for(let x=0;x<W;x++){
+    const x1=Math.max(0,x-half),y1=Math.max(0,y-half);
+    const x2=Math.min(W-1,x+half),y2=Math.min(H-1,y+half);
+    const cnt=(x2-x1+1)*(y2-y1+1);
+    const sum=ii[(y2+1)*(W+1)+(x2+1)]-ii[y1*(W+1)+(x2+1)]-ii[(y2+1)*(W+1)+x1]+ii[y1*(W+1)+x1];
+    out[y*W+x]=g[y*W+x]<sum/cnt-C?1:0;
+  }}
+  return out;
+}
+
+// ── Connected components (row-by-row union-find) ────────────────────
+function connectedComponents(bw,W,H){
+  const lbl=new Int32Array(W*H).fill(-1);
+  let nxt=0;const par=[];
+  const find=x=>{while(par[x]!==x)x=par[x]=par[par[x]];return x;};
+  const union=(a,b)=>{a=find(a);b=find(b);if(a!==b)par[a]=b;};
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    if(!bw[y*W+x])continue;
+    const up=y>0&&bw[(y-1)*W+x]?lbl[(y-1)*W+x]:-1;
+    const le=x>0&&bw[y*W+x-1]?lbl[y*W+x-1]:-1;
+    if(up<0&&le<0){lbl[y*W+x]=nxt;par.push(nxt);nxt++;}
+    else if(up>=0&&le<0)lbl[y*W+x]=up;
+    else if(up<0&&le>=0)lbl[y*W+x]=le;
+    else{union(up,le);lbl[y*W+x]=le;}
+  }
+  const st={};
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const l=lbl[y*W+x];if(l<0)continue;
+    const r=find(l);
+    if(!st[r])st[r]={x1:x,x2:x,y1:y,y2:y,a:0};
+    const s=st[r];
+    if(x<s.x1)s.x1=x;if(x>s.x2)s.x2=x;
+    if(y<s.y1)s.y1=y;if(y>s.y2)s.y2=y;
+    s.a++;
+  }
+  return Object.values(st).filter(s=>s.a>4).map(s=>({
+    cx:(s.x1+s.x2)/2,cy:(s.y1+s.y2)/2,w:s.x2-s.x1+1,h:s.y2-s.y1+1,area:s.a
+  }));
+}
+
+// ── Cluster circles by Y proximity ─────────────────────────────────
+function clusterY(pts,eps){
+  if(!pts.length)return[];
+  const s=[...pts].sort((a,b)=>a.y-b.y);
+  const cl=[[s[0]]];
+  for(let i=1;i<s.length;i++){
+    const last=cl[cl.length-1];
+    const midY=last.reduce((a,p)=>a+p.y,0)/last.length;
+    Math.abs(s[i].y-midY)<=eps?last.push(s[i]):cl.push([s[i]]);
+  }
+  return cl;
+}
+
+// ── Average brightness inside circle ───────────────────────────────
+function avgBright(gray,W,H,cx,cy,r){
+  let s=0,c=0;
+  const x0=Math.max(0,cx-r|0),x1=Math.min(W-1,(cx+r+1)|0);
+  const y0=Math.max(0,cy-r|0),y1=Math.min(H-1,(cy+r+1)|0);
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++)
+    if((x-cx)**2+(y-cy)**2<=r*r){s+=gray[y*W+x];c++;}
+  return c>0?s/c:255;
+}
+
+// ═══════════════════════════════════════════════
+// RENDER SCAN RESULT
+// ═══════════════════════════════════════════════
+function renderResult(tpl){
+  const ltrs=LTRS[tpl.answerType];
+  const correct=detAns.filter((a,i)=>a===tpl.answers[i]).length;
+  const nd=detAns.filter(a=>a===null).length;
+  const score=Math.round((correct/tpl.questionCount)*100);
+
+  G('card-stats').style.display='block';
+  G('stats-body').innerHTML=`
+    <div class="score-big" style="color:${score>=70?'var(--green)':'var(--red)'}">${score}</div>
+    <div style="text-align:center;font-size:12px;color:var(--muted);margin-bottom:12px">Skor Akhir</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
+      <div style="background:var(--bg);border-radius:9px;padding:10px">
+        <div style="font-size:20px;font-weight:700;color:var(--green);font-family:'Space Mono',monospace">${correct}</div>
+        <div style="font-size:10px;color:var(--muted)">Benar</div></div>
+      <div style="background:var(--bg);border-radius:9px;padding:10px">
+        <div style="font-size:20px;font-weight:700;color:var(--red);font-family:'Space Mono',monospace">${tpl.questionCount-correct-nd}</div>
+        <div style="font-size:10px;color:var(--muted)">Salah</div></div>
+      <div style="background:var(--bg);border-radius:9px;padding:10px">
+        <div style="font-size:20px;font-weight:700;color:var(--yellow);font-family:'Space Mono',monospace">${nd}</div>
+        <div style="font-size:10px;color:var(--muted)">Kosong</div></div>
+    </div>
+    ${nd>0?`<div style="font-size:11px;color:var(--yellow);margin-top:9px;line-height:1.5">⚠ ${nd} jawaban tidak terdeteksi. Foto ulang dengan kualitas lebih baik.</div>`:''}`;
+
+  const cols=chunk(Array.from({length:tpl.questionCount},(_,i)=>i),10);
+  const grid=G('res-grid');grid.innerHTML='';
+  cols.forEach(col=>{
+    const cd=document.createElement('div');cd.className='answer-col';
+    col.forEach(idx=>{
+      const row=document.createElement('div');row.className='answer-row';
+      row.innerHTML=`<span class="ans-num">${idx+1}.</span>`;
+      ltrs.forEach(l=>{
+        const b=document.createElement('button');
+        const det=detAns[idx]===l,key=tpl.answers[idx]===l;
+        b.className='bbl'+(det&&key?' ok':det&&!key?' bad':!det&&key?' hint':'');
+        b.textContent=l;b.disabled=true;
+        row.appendChild(b);
+      });
+      cd.appendChild(row);
+    });
+    grid.appendChild(cd);
+  });
+
+  G('card-detected').style.display='block';
+  G('card-detected').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function saveResult(){
+  if(!detAns)return alert('Lakukan scan dulu!');
+  const name=G('stu-name').value.trim();
+  if(!name)return alert('Isi nama siswa!');
+  const tpl=templates.find(t=>t.id===selTpl);
+  const correct=detAns.filter((a,i)=>a===tpl.answers[i]).length;
+  const score=Math.round((correct/tpl.questionCount)*100);
+  const rec={id:Date.now(),templateId:tpl.id,subject:tpl.subject,
+    studentName:name,studentClass:G('stu-cls').value.trim(),
+    answers:[...detAns],keyAnswers:[...tpl.answers],
+    correct,total:tpl.questionCount,score,date:new Date().toISOString()
+  };
+  results.push(rec);
+  persist(); badges();
+
+  // Kirim ke Google Sheets jika URL sudah dikonfigurasi
+  if(gsUrl){
+    sendToSheets(rec).then(ok=>{
+      if(ok) showToast('✅ Tersimpan & terkirim ke Google Sheets!','var(--green)');
+      else   showToast('✅ Tersimpan lokal. Gagal kirim ke Sheets — cek URL/koneksi.','var(--yellow)');
+    });
+  } else {
+    showToast(`✅ Tersimpan lokal! ${name} · Skor: ${score} · ${score>=70?'LULUS':'TIDAK LULUS'}`,'var(--green)');
+  }
+
+  G('stu-name').value='';G('stu-cls').value='';
+  resetImg();detAns=null;
+  G('card-stats').style.display='none';
+  G('card-detected').style.display='none';
+}
+
+// ── Google Sheets integration ──────────────────────────────────────
+async function sendToSheets(rec){
+  if(!gsUrl)return false;
+  try{
+    const payload={
+      timestamp:new Date(rec.date).toLocaleString('id-ID'),
+      studentName:rec.studentName,
+      studentClass:rec.studentClass||'',
+      subject:rec.subject,
+      correct:rec.correct,
+      total:rec.total,
+      score:rec.score,
+      status:rec.score>=70?'LULUS':'TIDAK LULUS',
+      answers:rec.answers.map(a=>a||'-').join(','),
+      keyAnswers:rec.keyAnswers.map(a=>a||'-').join(',')
+    };
+    const res=await fetch(gsUrl,{
+      method:'POST',
+      mode:'no-cors', // Google Apps Script requires no-cors
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    return true; // no-cors always resolves if request was sent
+  }catch(e){
+    console.error('Sheets error:',e);
+    return false;
+  }
+}
+
+async function testGs(){
+  const url=G('gs-url').value.trim();
+  if(!url)return showGsResult('⚠ Masukkan URL terlebih dahulu.','var(--yellow)');
+  showGsResult('🔄 Mengirim test...','var(--muted)');
+  try{
+    await fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({test:true,timestamp:new Date().toISOString()})
+    });
+    showGsResult('✅ Request terkirim! Cek sheet Anda — baris test seharusnya muncul dalam beberapa detik.','var(--green)');
+  }catch(e){
+    showGsResult('❌ Gagal: '+e.message,'var(--red)');
+  }
+}
+
+function showGsResult(msg,color){
+  const el=G('gs-test-result');
+  el.style.display='block';
+  el.style.background=color==='var(--green)'?'#022c22':color==='var(--red)'?'#450a0a':'#1c1917';
+  el.style.color=color;
+  el.style.border='1px solid '+color;
+  el.textContent=msg;
+}
+
+function saveGsUrl(){
+  const url=G('gs-url').value.trim();
+  gsUrl=url;
+  localStorage.setItem('ljk_gs_url',url);
+  badges();
+  showGsResult(url?'✅ URL tersimpan! Tekan Test Koneksi untuk verifikasi.':'⚠ URL dikosongkan. Google Sheets dinonaktifkan.',url?'var(--green)':'var(--yellow)');
+}
+
+// ── Toast notification ─────────────────────────────────────────────
+function showToast(msg,color='var(--green)'){
+  let t=document.getElementById('toast');
+  if(!t){t=document.createElement('div');t.id='toast';
+    t.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;z-index:9999;max-width:90vw;text-align:center;transition:opacity .3s;box-shadow:0 4px 20px rgba(0,0,0,.4)';
+    document.body.appendChild(t);
+  }
+  t.style.background=color==='var(--green)'?'#022c22':color==='var(--yellow)'?'#431407':'#450a0a';
+  t.style.color=color; t.style.border='1px solid '+color;
+  t.textContent=msg; t.style.opacity='1';
+  clearTimeout(t._to); t._to=setTimeout(()=>t.style.opacity='0',3500);
+}
+
+// ═══════════════════════════════════════════════
+// REPORT
+// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+// SETTINGS PAGE
+// ═══════════════════════════════════════════════
+function initSettings(){
+  G('gs-url').value=gsUrl||'';
+  G('new-user').value=localStorage.getItem('ljk_admin_user')||'admin';
+  const tSize=new Blob([JSON.stringify(templates)]).size;
+  const rSize=new Blob([JSON.stringify(results)]).size;
+  G('storage-info').innerHTML=
+    `📦 <strong style="color:var(--fg)">${templates.length}</strong> template tersimpan (${(tSize/1024).toFixed(1)} KB)<br>`+
+    `📋 <strong style="color:var(--fg)">${results.length}</strong> hasil scan tersimpan (${(rSize/1024).toFixed(1)} KB)<br>`+
+    `💿 Total: <strong style="color:var(--fg)">${((tSize+rSize)/1024).toFixed(1)} KB</strong> dari ~5 MB kuota`;
+}
+
+async function changeAdminPass(){
+  const user=G('new-user').value.trim();
+  const p1=G('new-pass').value;
+  const p2=G('new-pass2').value;
+  const res=G('pass-result');
+  const show=(msg,ok)=>{res.style.display='block';res.style.background=ok?'#022c22':'#450a0a';res.style.color=ok?'var(--green)':'var(--red)';res.style.border='1px solid '+(ok?'var(--green)':'var(--red)');res.textContent=msg;};
+  if(!user)return show('⚠ Username tidak boleh kosong.',false);
+  if(p1.length<6)return show('⚠ Password minimal 6 karakter.',false);
+  if(p1!==p2)return show('⚠ Konfirmasi password tidak cocok.',false);
+  const hash=await sha256(p1);
+  localStorage.setItem('ljk_admin_user',user);
+  localStorage.setItem('ljk_admin_hash',hash);
+  G('new-pass').value=''; G('new-pass2').value='';
+  show(`✅ Kredensial admin berhasil diperbarui! Username: "${user}"`,true);
+  showToast('🔒 Password admin berhasil diganti.','var(--green)');
+}
+
+function exportJSON(){
+  const data={templates,results,exported:new Date().toISOString(),version:'1.0'};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`ljk-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  showToast('📤 Backup JSON berhasil diunduh!','var(--green)');
+}
+
+function importJSON(e){
+  const file=e.target.files[0];if(!file)return;
+  const fr=new FileReader();
+  fr.onload=ev=>{
+    try{
+      const data=JSON.parse(ev.target.result);
+      if(!data.templates||!data.results)throw new Error('Format file tidak valid');
+      const confirm=window.confirm(`Import ${data.templates.length} template dan ${data.results.length} hasil scan?\nData saat ini akan DITIMPA.`);
+      if(!confirm)return;
+      templates=data.templates; results=data.results;
+      persist(); badges();
+      showToast(`✅ Import berhasil! ${templates.length} template, ${results.length} hasil.`,'var(--green)');
+      initSettings();
+    }catch(err){alert('Gagal import: '+err.message);}
+  };
+  fr.readAsText(file);
+}
+
+function clearAll(){
+  if(!confirm('Hapus SEMUA data (template + hasil scan)? Tindakan ini tidak bisa dibatalkan!'))return;
+  templates=[];results=[];gsUrl='';
+  localStorage.removeItem('ljk_templates');
+  localStorage.removeItem('ljk_results');
+  localStorage.removeItem('ljk_gs_url');
+  badges(); initSettings();
+  showToast('🗑 Semua data telah dihapus.','var(--red)');
+}
+
+// ═══════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════
+badges();
+updateAdminUI();
+renderKeyGrid();
+renderPreview();
+
+function renderReport(f){
+  rF=f;
+  const subjs=[...new Set(results.map(r=>r.subject))];
+  const filt=f==='all'?results:results.filter(r=>r.subject===f);
+  const avg=filt.length?Math.round(filt.reduce((s,r)=>s+r.score,0)/filt.length):0;
+  const pass=filt.filter(r=>r.score>=70).length;
+  G('rpt-stats').innerHTML=[{l:'Total Siswa',v:filt.length,i:'👥'},{l:'Rata-rata',v:avg,i:'📊'},{l:'Lulus (≥70)',v:pass,i:'✅'},{l:'Tidak Lulus',v:filt.length-pass,i:'❌'}]
+    .map(s=>`<div class="stat-card"><div style="font-size:20px">${s.i}</div><div class="stat-num">${s.v}</div><div class="stat-lbl">${s.l}</div></div>`).join('');
+  G('rpt-filters').innerHTML=['all',...subjs].map(s=>`<button class="chip ${rF===s?'active':''}" onclick="renderReport('${s}')">${s==='all'?'Semua':s}</button>`).join('');
+  const tbody=G('rpt-body');
+  if(!filt.length){tbody.innerHTML='';G('rpt-empty').style.display='block';}
+  else{
+    G('rpt-empty').style.display='none';
+    tbody.innerHTML=filt.map((r,i)=>`<tr>
+      <td>${i+1}</td><td><strong>${r.studentName}</strong></td><td>${r.studentClass||'—'}</td><td>${r.subject}</td>
+      <td>${r.correct}</td><td>${r.total}</td>
+      <td><span style="font-family:'Space Mono',monospace;font-size:15px;font-weight:700;color:${r.score>=70?'var(--green)':'var(--red)'}">${r.score}</span></td>
+      <td><span class="pill ${r.score>=70?'pill-g':'pill-r'}">${r.score>=70?'LULUS':'TIDAK LULUS'}</span></td>
+      <td style="color:var(--muted);font-size:10.5px">${new Date(r.date).toLocaleDateString('id-ID')}</td>
+    </tr>`).join('');
+  }
+}
+</script>
+</body>
+</html>
