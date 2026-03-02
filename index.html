@@ -150,7 +150,7 @@ label{display:block;font-size:10.5px;font-weight:700;color:var(--muted);margin-b
       <span id="secret-dot"
         onclick="handleSecretTap()"
         title=""
-        style="width:15px;height:15px;border-radius:50%;background:var(--border);display:inline-block;cursor:default;opacity:0.35;flex-shrink:0;margin-top:-14px;transition:opacity .2s"
+        style="width:7px;height:7px;border-radius:50%;background:var(--border);display:inline-block;cursor:default;opacity:0.35;flex-shrink:0;margin-top:-14px;transition:opacity .2s"
         onmouseenter="this.style.opacity='.35'"
       ></span>
     </div>
@@ -627,21 +627,37 @@ function saveTemplate(){
 
 // Buat elemen LJK full-size (A4 px) tersembunyi untuk di-render
 function buildExportNode(showKey){
-  const subj = G('cfg-subj').value || '—';
+  const subj = G('cfg-subj').value || '\u2014';
   const ltrs = LTRS[cA];
   const cols = chunk(Array.from({length:cQ},(_,i)=>i), 10);
+  const numCols = cols.length;
+
+  // A4 konten: 794px - 2x32px padding = 730px
+  const CONTENT_W    = 730;
+  const COL_GAP      = 16;  // gap antar kolom
+  const NUM_W        = 26;  // lebar kolom nomor
+  const BUBBLE_GAP   = 3;   // gap antar bubble
+  // Lebar per kolom = rata dari konten dikurangi semua gap antar kolom
+  const colAvail     = Math.floor((CONTENT_W - (numCols - 1) * COL_GAP) / numCols);
+  // Ukuran bubble = sisa setelah nomor dibagi jumlah opsi
+  const rawBubble    = Math.floor((colAvail - NUM_W - (ltrs.length - 1) * BUBBLE_GAP) / ltrs.length);
+  const BUBBLE       = Math.min(22, Math.max(14, rawBubble));
+  const FONT_B       = Math.max(7,  Math.floor(BUBBLE * 0.44));
+  const FONT_N       = Math.max(9,  Math.floor(BUBBLE * 0.54));
+  const ROW_MB       = Math.max(3,  Math.floor(BUBBLE * 0.45));
+  // Lebar kolom aktual = nomor + bubble*n + gap*(n-1)
+  const actualColW   = NUM_W + ltrs.length * BUBBLE + (ltrs.length - 1) * BUBBLE_GAP;
 
   const wrap = document.createElement('div');
   wrap.style.cssText = [
     'position:absolute','left:-9999px','top:0',
-    'width:794px','min-height:1123px',        // A4 96dpi
+    'width:794px','min-height:1123px',
     'background:#ffffff','color:#111',
-    'font-family:"Space Mono",monospace',
+    'font-family:\"Space Mono\",monospace',
     'font-size:11px','padding:28px 32px',
     'box-sizing:border-box','line-height:1.4'
   ].join(';');
 
-  // ── judul ──
   wrap.innerHTML = `
   <div style="border-bottom:2.5px solid #111;padding-bottom:11px;margin-bottom:14px">
     <div style="font-size:17px;font-weight:700;text-align:center;letter-spacing:2.5px">LEMBAR JAWABAN KOMPUTER (LJK)</div>
@@ -650,7 +666,7 @@ function buildExportNode(showKey){
   <div style="display:flex;justify-content:space-between;margin-bottom:13px;font-size:11px">
     <div>
       <div style="margin-bottom:7px">Nama &nbsp;: <span style="display:inline-block;width:200px;border-bottom:1px solid #777">&nbsp;</span></div>
-      <div>Kelas &nbsp;&nbsp;: <span style="display:inline-block;width:200px;border-bottom:1px solid #777">&nbsp;</span></div>
+      <div>Kelas &nbsp;: <span style="display:inline-block;width:200px;border-bottom:1px solid #777">&nbsp;</span></div>
     </div>
     <div style="font-size:10px;color:#666;text-align:right">
       Jumlah Soal: ${cQ}<br>
@@ -659,40 +675,47 @@ function buildExportNode(showKey){
     </div>
   </div>
   <div style="border-top:1px dashed #bbb;margin-bottom:10px"></div>
-  <div style="font-size:9.5px;color:#666;margin-bottom:13px">
+  <div style="font-size:9.5px;color:#666;margin-bottom:14px">
     Petunjuk: Hitamkan/lingkari bulatan huruf jawaban yang benar dengan jelas dan penuh menggunakan pensil/pena hitam.
   </div>
-  <div id="exp-grid" style="display:flex;gap:0;flex-wrap:nowrap;justify-content:space-between"></div>
+  <div id="exp-grid" style="display:flex;flex-wrap:nowrap;align-items:flex-start;gap:${COL_GAP}px"></div>
   <div style="border-top:1px dashed #bbb;margin-top:14px;padding-top:8px;font-size:9px;color:#bbb;text-align:center">
-    LJK Scanner &copy; ${new Date().getFullYear()} &nbsp;·&nbsp; Dilarang menyalin jawaban
+    LJK Scanner &copy; ${new Date().getFullYear()} &nbsp;\u00b7&nbsp; Dilarang menyalin jawaban
   </div>`;
 
-  // ── grid soal ──
   const grid = wrap.querySelector('#exp-grid');
-  const colW = Math.floor(730 / cols.length);
 
   cols.forEach(col => {
     const cd = document.createElement('div');
-    cd.style.cssText = `width:${colW}px;flex-shrink:0`;
+    // Lebar tepat aktual — tidak boleh stretch/shrink
+    cd.style.cssText = `flex:0 0 ${actualColW}px;width:${actualColW}px`;
+
     col.forEach(idx => {
-      const n = idx + 1;
       const row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;gap:3px;margin-bottom:5px;font-size:10.5px';
-      row.innerHTML = `<span style="width:22px;text-align:right;font-weight:700;font-size:10px">${n}.</span>`;
+      row.style.cssText = `display:flex;align-items:center;gap:${BUBBLE_GAP}px;margin-bottom:${ROW_MB}px`;
+
+      const num = document.createElement('span');
+      num.style.cssText = `width:${NUM_W}px;text-align:right;font-weight:700;font-size:${FONT_N}px;flex-shrink:0;margin-right:2px`;
+      num.textContent = `${idx+1}.`;
+      row.appendChild(num);
+
       ltrs.forEach(l => {
         const isKey = showKey && keyAns[idx] === l;
         const sp = document.createElement('span');
         sp.style.cssText = [
-          'display:inline-flex','align-items:center','justify-content:center',
-          'width:16px','height:16px','border-radius:50%',
-          `border:1.5px solid ${isKey ? '#c0392b' : '#888'}`,
-          `background:${isKey ? '#c0392b' : 'transparent'}`,
-          `color:${isKey ? '#fff' : '#333'}`,
-          'font-size:8px',`font-weight:${isKey ? 700 : 400}`
+          `display:inline-flex`,`align-items:center`,`justify-content:center`,
+          `width:${BUBBLE}px`,`height:${BUBBLE}px`,`border-radius:50%`,
+          `border:1.5px solid ${isKey?'#c0392b':'#555'}`,
+          `background:${isKey?'#c0392b':'transparent'}`,
+          `color:${isKey?'#fff':'#222'}`,
+          `font-size:${FONT_B}px`,
+          `font-weight:${isKey?700:500}`,
+          `flex-shrink:0`
         ].join(';');
         sp.textContent = l;
         row.appendChild(sp);
       });
+
       cd.appendChild(row);
     });
     grid.appendChild(cd);
@@ -701,6 +724,7 @@ function buildExportNode(showKey){
   document.body.appendChild(wrap);
   return wrap;
 }
+
 
 function setExportBtns(disabled, msg=''){
   G('btn-export-pdf').disabled = disabled;
@@ -863,49 +887,66 @@ function makeSample(){
   sc.width=W;sc.height=H;
   const ctx=sc.getContext('2d');
 
-  // Background
+  // ── Background kertas ──
   ctx.fillStyle='#f9f9f7';ctx.fillRect(0,0,W,H);
-  // noise
   for(let i=0;i<1500;i++){ctx.fillStyle=`rgba(0,0,0,${Math.random()*.025})`;ctx.fillRect(Math.random()*W,Math.random()*H,2,2);}
 
-  // Header
+  // ── Header ──
   ctx.fillStyle='#111';ctx.font='bold 19px monospace';ctx.textAlign='center';
   ctx.fillText('LEMBAR JAWABAN KOMPUTER (LJK)',W/2,52);
   ctx.font='13px monospace';ctx.fillText(tpl.subject,W/2,74);
   ctx.textAlign='left';
   ctx.beginPath();ctx.moveTo(30,84);ctx.lineTo(W-30,84);ctx.lineWidth=2;ctx.strokeStyle='#222';ctx.stroke();
-
   ctx.font='12px monospace';ctx.fillStyle='#333';
   ctx.fillText('Nama : ____________________________',38,112);
   ctx.fillText('Kelas : ________________',38,136);
-
   ctx.setLineDash([4,4]);
   ctx.beginPath();ctx.moveTo(30,152);ctx.lineTo(W-30,152);ctx.lineWidth=1;ctx.strokeStyle='#aaa';ctx.stroke();
   ctx.setLineDash([]);
-
   ctx.font='10px monospace';ctx.fillStyle='#777';
   ctx.fillText('Petunjuk: Hitamkan bulatan jawaban yang benar dengan pensil/pena.',38,170);
 
+  // ── Grid soal — gunakan kalkulasi proporsional yang sama dengan buildExportNode ──
   const cols=chunk(Array.from({length:tpl.questionCount},(_,i)=>i),10);
-  const gx=38,gy=196,colW=Math.floor((W-gx*2)/cols.length),rowH=40,R=12;
+  const CONTENT_W = W - 76; // sama dengan 794 - 64 = area konten
+  const BUBBLE = 22, B_GAP = 4, NUM_W = 28, ROW_H = 34;
+  const rowW = NUM_W + ltrs.length*(BUBBLE+B_GAP);
+  const colW = rowW + 18;
+  const totalNeeded = cols.length * colW;
+  const sc2 = totalNeeded > CONTENT_W ? CONTENT_W/totalNeeded : 1;
+  const R      = Math.max(9, Math.floor(BUBBLE*sc2/2));
+  const bGap   = Math.max(2, Math.floor(B_GAP*sc2));
+  const numW   = Math.floor(NUM_W*sc2);
+  const rowH   = Math.max(26, Math.floor(ROW_H*sc2));
+  const fColW  = Math.floor(colW*sc2);
+  const fFontB = Math.max(7, Math.floor(R*0.9));
+  const fFontN = Math.max(9, Math.floor(R*1.1));
+
+  const gx=38, gy=192;
 
   cols.forEach((col,ci)=>{
     col.forEach((idx,ri)=>{
-      const bx=gx+ci*colW,by=gy+ri*rowH;
-      ctx.font='bold 10px monospace';ctx.fillStyle='#111';ctx.textAlign='left';
-      ctx.fillText(`${idx+1}.`,bx,by+5);
+      const bx = gx + ci*(fColW+2);
+      const by = gy + ri*rowH;
+
+      // nomor soal
+      ctx.font=`bold ${fFontN}px monospace`;ctx.fillStyle='#111';ctx.textAlign='left';
+      ctx.fillText(`${idx+1}.`, bx, by+R*0.6);
+
+      // bubbles
       ltrs.forEach((l,li)=>{
-        const cx=bx+28+li*28,cy=by;
-        const filled=tpl.answers[idx]===l&&Math.random()>.07;
+        const cx = bx + numW + li*(R*2+bGap) + R;
+        const cy = by;
+        const filled = tpl.answers[idx]===l && Math.random()>.07;
         ctx.beginPath();ctx.arc(cx,cy,R,0,Math.PI*2);
         if(filled){
-          ctx.fillStyle='#1a1a1a';ctx.fill();
-          ctx.fillStyle='#fff';ctx.font='bold 8.5px monospace';ctx.textAlign='center';
-          ctx.fillText(l,cx,cy+3);
+          ctx.fillStyle='#111';ctx.fill();
+          ctx.fillStyle='#fff';ctx.font=`bold ${fFontB}px monospace`;ctx.textAlign='center';
+          ctx.fillText(l,cx,cy+R*0.35);
         } else {
-          ctx.strokeStyle='#888';ctx.lineWidth=1.5;ctx.stroke();
-          ctx.fillStyle='#666';ctx.font='8.5px monospace';ctx.textAlign='center';
-          ctx.fillText(l,cx,cy+3);
+          ctx.strokeStyle='#777';ctx.lineWidth=1.5;ctx.stroke();
+          ctx.fillStyle='#555';ctx.font=`${fFontB}px monospace`;ctx.textAlign='center';
+          ctx.fillText(l,cx,cy+R*0.35);
         }
       });
     });
