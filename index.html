@@ -966,7 +966,7 @@ async function runScan(){
   const tpl=templates.find(t=>t.id===selTpl);
   showOv('Memproses gambar...','Mendeteksi bubble jawaban');
   G('scan-log').innerHTML='';
-  await sleep(60);
+  await sleep(80);
   try{
     detAns=await processImage(sc,tpl);
     hideOv();
@@ -974,197 +974,319 @@ async function runScan(){
   }catch(e){hideOv();console.error(e);alert('Gagal memproses: '+e.message);}
 }
 
-// ═══════════════════════════════════════════════
-// PURE JS IMAGE PROCESSING
-// ═══════════════════════════════════════════════
-async function processImage(srcCanvas,tpl){
-  const W=srcCanvas.width,H=srcCanvas.height;
+// ═══════════════════════════════════════════════════════
+// VISION ENGINE v3 — Grid-aware robust bubble detection
+// ═══════════════════════════════════════════════════════
+async function processImage(srcCanvas, tpl){
+  const W=srcCanvas.width, H=srcCanvas.height;
   const ltrs=LTRS[tpl.answerType];
-  addLog(`📐 Gambar: ${W}×${H} | Soal: ${tpl.questionCount} | Opsi: ${ltrs.join('')}`);
+  const nQ=tpl.questionCount;
+  const nOpt=ltrs.length;
+  const nCols=Math.ceil(nQ/10); // jumlah kolom soal (20soal=2, 30soal=3, dst)
+  addLog(`📐 ${W}×${H} | ${nQ} soal | ${nOpt} opsi | ${nCols} kolom`);
 
-  // 1. Baca piksel
-  const rawData=srcCanvas.getContext('2d').getImageData(0,0,W,H).data;
-
-  // 2. Grayscale (luma formula)
+  // ── 1. Grayscale ──────────────────────────────────────────────
+  const raw=srcCanvas.getContext('2d').getImageData(0,0,W,H).data;
   const gray=new Uint8Array(W*H);
-  for(let i=0;i<W*H;i++){const p=i*4;gray[i]=Math.round(.299*rawData[p]+.587*rawData[p+1]+.114*rawData[p+2]);}
-  addLog('🔲 Grayscale: OK');
+  for(let i=0;i<W*H;i++){const p=i*4;gray[i]=(77*raw[p]+150*raw[p+1]+29*raw[p+2])>>8;}
 
-  // 3. Gaussian blur 5×5 (2 pass box blur untuk efisiensi)
-  const blurred=boxBlur(boxBlur(gray,W,H,2),W,H,2);
-  addLog('〰 Gaussian blur: OK');
+  // ── 2. CLAHE-lite: normalize contrast per tile ────────────────
+  const normGray=claheNorm(gray,W,H,8);
+  addLog('🎨 Normalisasi kontras: OK');
 
-  // 4. Adaptive threshold – tahan pencahayaan tidak merata
-  const bw=adaptiveThresh(blurred,W,H,31,9);
-  addLog('⬛ Adaptive threshold: OK');
+  // ── 3. Multi-scale blur + adaptive threshold ──────────────────
+  const blur1=gaussBox(normGray,W,H,2);
+  const bw=adaptThresh(blur1,W,H,41,7);
+  addLog('⬛ Threshold: OK');
 
-  // 5. Connected component labeling (blob detection)
-  const blobs=connectedComponents(bw,W,H);
-  addLog(`🔵 Total blob: ${blobs.length}`);
+  // ── 4. Detect all circle-like blobs ──────────────────────────
+  const blobs=findBlobs(bw,W,H);
 
-  // 6. Filter blob yang bentuknya seperti lingkaran
-  const minR=Math.min(W,H)*.004, maxR=Math.min(W,H)*.055;
+  // Estimasi radius bubble dari dimensi gambar dan jumlah soal
+  // LJK: ~10 baris × nCols kolom dalam area foto
+  // Perkiraan radius = H / (nQ/nCols * 2.5)
+  const estR=Math.min(W,H)/(Math.max(nQ/nCols,10)*2.8);
+  const minR=estR*0.4, maxR=estR*2.5;
+
   const circles=blobs.filter(b=>{
-    const ar=b.w/b.h;
-    if(ar<.4||ar>2.5)return false;
-    if(b.w<minR*2||b.w>maxR*2)return false;
     const r=(b.w+b.h)/4;
-    const expected=Math.PI*r*r;
-    const fill=b.area/expected;
-    return fill>.3&&fill<1.5;
-  }).map(b=>({x:b.cx,y:b.cy,r:(b.w+b.h)/4}));
+    if(r<minR||r>maxR) return false;
+    const ar=b.w/b.h;
+    if(ar<0.45||ar>2.2) return false;
+    // circularity check
+    const expectedArea=Math.PI*r*r;
+    const circ=b.area/expectedArea;
+    return circ>0.28&&circ<1.55;
+  }).map(b=>({x:b.cx, y:b.cy, r:(b.w+b.h)/4, w:b.w, h:b.h}));
 
-  addLog(`⭕ Bubble kandidat: ${circles.length}`);
+  addLog(`⭕ Blob kandidat: ${blobs.length} → circle: ${circles.length} (estR≈${estR.toFixed(1)}px)`);
 
-  // 7. Clustering baris berdasarkan posisi Y
-  const epsY=Math.min(W,H)*.022;
-  const rows=clusterY(circles,epsY);
-  addLog(`📊 Baris: ${rows.length} | Butuh: ${tpl.questionCount}`);
+  if(circles.length < nQ*nOpt*0.3){
+    addLog('⚠ Terlalu sedikit bubble. Coba: pencahayaan lebih terang, foto lebih dekat, atau isian lebih gelap.');
+  }
 
-  // 8. Gambar overlay pada debug canvas
+  // ── 5. Estimasi median radius untuk sampling akurat ───────────
+  const radii=circles.map(c=>c.r).sort((a,b)=>a-b);
+  const medR=radii[Math.floor(radii.length/2)]||estR;
+  addLog(`📏 Median radius bubble: ${medR.toFixed(1)}px`);
+
+  // ── 6. Cluster baris dengan eps adaptif ──────────────────────
+  const epsY=medR*1.4;
+  const rawRows=clusterByY(circles,epsY);
+
+  // Filter: baris dengan minimal nOpt bubble
+  let rows=rawRows.filter(r=>r.length>=nOpt);
+  addLog(`📊 Total baris: ${rawRows.length} | valid (≥${nOpt} bubble): ${rows.length}`);
+
+  // ── 7. Pisahkan baris ke kolom kiri & kanan ───────────────────
+  // Strategi: urutkan baris per Y, lalu kelompokkan per kolom soal berdasarkan X median
+  rows=rows.map(r=>{r.sort((a,b)=>a.x-b.x);return r;});
+  rows.sort((a,b)=>medianX(a)-medianX(b)||a[0].y-b[0].y);
+
+  // Cluster baris ke dalam kolom soal berdasarkan X median
+  let colGroups=clusterByX(rows, medR*nOpt*1.5);
+  addLog(`📋 Kelompok kolom: ${colGroups.length} (harap ${nCols})`);
+
+  // Sort tiap kolom soal berdasarkan Y
+  colGroups=colGroups.map(cg=>cg.sort((a,b)=>a[0].y-b[0].y));
+  // Sort kolom dari kiri ke kanan
+  colGroups.sort((a,b)=>medianX(a[0])-medianX(b[0]));
+
+  // Flatten ke array baris soal berurutan (col1_row1..col1_row10, col2_row1..col2_row10, dst)
+  // Interleave: jika hanya 2 kolom, soal 1-10 di kolom kiri, 11-20 di kolom kanan
+  const orderedRows=[];
+  colGroups.forEach(cg=>{
+    cg.slice(0,10).forEach(row=>orderedRows.push(row));
+  });
+  addLog(`🔢 Baris terurut: ${orderedRows.length}/${nQ}`);
+
+  // ── 8. Debug canvas ───────────────────────────────────────────
   const dc=G('debug-canvas');
-  dc.width=W;dc.height=H;
+  dc.width=W; dc.height=H;
   const dctx=dc.getContext('2d');
   dctx.drawImage(srcCanvas,0,0);
 
-  // lingkaran biru semua kandidat
-  dctx.strokeStyle='rgba(79,142,247,0.55)';dctx.lineWidth=1.5;
-  circles.forEach(c=>{dctx.beginPath();dctx.arc(c.x,c.y,c.r+2,0,Math.PI*2);dctx.stroke();});
+  // Semua kandidat bubble (biru transparan)
+  circles.forEach(c=>{
+    dctx.beginPath();dctx.arc(c.x,c.y,c.r,0,Math.PI*2);
+    dctx.strokeStyle='rgba(100,160,255,0.4)';dctx.lineWidth=1;dctx.stroke();
+  });
 
-  // 9. Untuk setiap baris valid, tentukan bubble yang diisi
-  const detected=Array(tpl.questionCount).fill(null);
-  const validRows=rows.filter(r=>r.length>=ltrs.length).slice(0,tpl.questionCount);
-  addLog(`✅ Baris valid: ${validRows.length}/${tpl.questionCount}`);
+  // ── 9. Untuk setiap baris soal, cari bubble yang diisi ───────
+  const detected=Array(nQ).fill(null);
 
-  validRows.forEach((row,qi)=>{
-    if(qi>=tpl.questionCount)return;
-    row.sort((a,b)=>a.x-b.x);
-    const bubbles=row.slice(-ltrs.length);
-    if(bubbles.length<ltrs.length)return;
+  for(let qi=0;qi<Math.min(orderedRows.length,nQ);qi++){
+    const row=orderedRows[qi];
+    // Ambil nOpt bubble paling kanan sebagai opsi jawaban
+    const sorted=[...row].sort((a,b)=>a.x-b.x);
+    // Pilih nOpt bubble yang paling representatif
+    // Jika baris punya lebih dari nOpt, ambil nOpt terakhir (paling kanan)
+    const bubbles=pickBestBubbles(sorted, nOpt, medR);
+    if(!bubbles||bubbles.length<nOpt){
+      addLog(`⚠ Soal ${qi+1}: hanya ${bubbles?.length||0} bubble`);
+      continue;
+    }
 
-    // Hitung kecerahan rata-rata dalam setiap bubble dari grayscale ASLI
-    const brights=bubbles.map(c=>avgBright(gray,W,H,c.x,c.y,c.r*.75));
-    const minB=Math.min(...brights),maxB=Math.max(...brights);
+    // Sample brightness dari grayscale ASLI (bukan normalized)
+    // Gunakan radius 65% agar tidak kena border
+    const brights=bubbles.map(c=>sampleBrightness(gray,W,H,c.x,c.y,c.r*0.65));
+
+    // Deteksi: temukan bubble paling gelap
+    const minB=Math.min(...brights);
+    const maxB=Math.max(...brights);
     const contrast=maxB-minB;
     const minIdx=brights.indexOf(minB);
 
-    // Bubble paling gelap dengan kontras cukup = jawaban siswa
-    if(contrast>15&&minB<210&&minIdx>=0&&minIdx<ltrs.length){
+    // Threshold kontras adaptif: min 12 (foto bagus), dikurangi jika pencahayaan gelap
+    const globalDark=minB<100; // gambar gelap secara keseluruhan
+    const contrastThresh=globalDark?8:12;
+
+    if(contrast>=contrastThresh && minIdx>=0 && minIdx<nOpt){
       detected[qi]=ltrs[minIdx];
-      const dc2=bubbles[minIdx];
-      // lingkaran hijau
-      dctx.beginPath();dctx.arc(dc2.x,dc2.y,dc2.r+5,0,Math.PI*2);
-      dctx.strokeStyle='#10b981';dctx.lineWidth=3;dctx.stroke();
-      // label huruf
-      const fs=Math.max(10,dc2.r*.9);
-      dctx.fillStyle='#10b981';dctx.font=`bold ${fs}px monospace`;dctx.textAlign='center';
-      dctx.fillText(ltrs[minIdx],dc2.x,dc2.y-dc2.r-4);dctx.textAlign='left';
+      const bc=bubbles[minIdx];
+      // Overlay hijau tebal
+      dctx.beginPath();dctx.arc(bc.x,bc.y,bc.r+Math.max(3,bc.r*0.3),0,Math.PI*2);
+      dctx.strokeStyle='#10b981';dctx.lineWidth=Math.max(2,bc.r*0.18);dctx.stroke();
+      // Label huruf
+      const fs=Math.max(11,bc.r*0.85);
+      dctx.fillStyle='#10b981';dctx.font=`bold ${fs}px monospace`;
+      dctx.textAlign='center';dctx.fillText(ltrs[minIdx],bc.x,bc.y-bc.r-3);
+      dctx.textAlign='left';
+      // Angka soal
+      dctx.fillStyle='rgba(16,185,129,0.85)';dctx.font=`${Math.max(9,fs*0.75)}px monospace`;
+      dctx.textAlign='right';dctx.fillText(`${qi+1}`,bc.x-bc.r-2,bc.y+3);dctx.textAlign='left';
     } else {
-      // tandai kuning = tidak yakin
-      dctx.beginPath();dctx.arc(bubbles[0].x,bubbles[0].y,(bubbles[0].r||10)+4,0,Math.PI*2);
-      dctx.strokeStyle='#f59e0b';dctx.lineWidth=2;dctx.stroke();
+      // Overlay kuning = tidak terdeteksi / kontras kurang
+      const bc=bubbles[0];
+      dctx.beginPath();dctx.arc(bc.x,bc.y,(bc.r||medR)+3,0,Math.PI*2);
+      dctx.strokeStyle='#f59e0b';dctx.lineWidth=1.5;dctx.stroke();
+      addLog(`⚠ Soal ${qi+1}: kontras=${contrast.toFixed(0)} (min=${minB.toFixed(0)}) — isian kurang gelap?`);
     }
-  });
+  }
 
   const cnt=detected.filter(a=>a!==null).length;
-  addLog(`🏁 Terdeteksi: ${cnt}/${tpl.questionCount}`);
-  if(cnt<tpl.questionCount*.4)addLog('💡 Tips: foto tegak lurus, cahaya merata, isian penuh/gelap.');
+  addLog(`🏁 Hasil: ${cnt}/${nQ} terdeteksi`);
+  if(cnt<nQ*0.6) addLog('💡 Tips: pencahayaan lebih terang & merata, isian penuh/gelap, foto tegak lurus.');
   return detected;
 }
 
-// ── Box blur (horizontal + vertical pass) ──────────────────────────
-function boxBlur(g,W,H,r){
-  const tmp=new Uint8Array(W*H),out=new Uint8Array(W*H);
-  for(let y=0;y<H;y++){let s=0,c=0;
+// ── CLAHE-lite: per-tile histogram normalization ─────────────────
+function claheNorm(g,W,H,tileN){
+  const out=new Uint8Array(W*H);
+  const tW=Math.ceil(W/tileN), tH=Math.ceil(H/tileN);
+  for(let ty=0;ty<tileN;ty++){
+    for(let tx=0;tx<tileN;tx++){
+      const x0=tx*tW, y0=ty*tH;
+      const x1=Math.min(x0+tW,W), y1=Math.min(y0+tH,H);
+      let mn=255,mx=0;
+      for(let y=y0;y<y1;y++) for(let x=x0;x<x1;x++){
+        const v=g[y*W+x]; if(v<mn)mn=v; if(v>mx)mx=v;
+      }
+      const range=mx-mn||1;
+      for(let y=y0;y<y1;y++) for(let x=x0;x<x1;x++){
+        out[y*W+x]=Math.round((g[y*W+x]-mn)/range*255);
+      }
+    }
+  }
+  return out;
+}
+
+// ── Box blur (separable, 1D sliding window) ──────────────────────
+function gaussBox(g,W,H,r){
+  const tmp=new Uint8Array(W*H), out=new Uint8Array(W*H);
+  for(let y=0;y<H;y++){
+    let s=0,c=0;
     for(let dx=-r;dx<=r;dx++){const nx=dx;if(nx>=0&&nx<W){s+=g[y*W+nx];c++;}}
     tmp[y*W]=s/c;
     for(let x=1;x<W;x++){
-      const add=x+r<W?g[y*W+x+r]:0,rem=x-r-1>=0?g[y*W+x-r-1]:0;
-      if(x+r<W)c++;if(x-r-1>=0)c--;s+=add-rem;tmp[y*W+x]=s/c;
+      if(x+r<W){s+=g[y*W+x+r];c++;}
+      if(x-r-1>=0){s-=g[y*W+x-r-1];c--;}
+      tmp[y*W+x]=s/c;
     }
   }
-  for(let x=0;x<W;x++){let s=0,c=0;
+  for(let x=0;x<W;x++){
+    let s=0,c=0;
     for(let dy=-r;dy<=r;dy++){const ny=dy;if(ny>=0&&ny<H){s+=tmp[ny*W+x];c++;}}
     out[x]=s/c;
     for(let y=1;y<H;y++){
-      const add=y+r<H?tmp[(y+r)*W+x]:0,rem=y-r-1>=0?tmp[(y-r-1)*W+x]:0;
-      if(y+r<H)c++;if(y-r-1>=0)c--;s+=add-rem;out[y*W+x]=s/c;
+      if(y+r<H){s+=tmp[(y+r)*W+x];c++;}
+      if(y-r-1>=0){s-=tmp[(y-r-1)*W+x];c--;}
+      out[y*W+x]=s/c;
     }
   }
   return out;
 }
 
-// ── Adaptive threshold (integral image) ────────────────────────────
-function adaptiveThresh(g,W,H,blockSize,C){
-  const half=Math.floor(blockSize/2);
-  const out=new Uint8Array(W*H);
+// ── Adaptive threshold (integral image, cepat) ───────────────────
+function adaptThresh(g,W,H,block,C){
+  const half=block>>1, out=new Uint8Array(W*H);
   const ii=new Float64Array((W+1)*(H+1));
-  for(let y=0;y<H;y++)for(let x=0;x<W;x++)
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++)
     ii[(y+1)*(W+1)+(x+1)]=g[y*W+x]+ii[y*(W+1)+(x+1)]+ii[(y+1)*(W+1)+x]-ii[y*(W+1)+x];
-  for(let y=0;y<H;y++){for(let x=0;x<W;x++){
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
     const x1=Math.max(0,x-half),y1=Math.max(0,y-half);
     const x2=Math.min(W-1,x+half),y2=Math.min(H-1,y+half);
-    const cnt=(x2-x1+1)*(y2-y1+1);
-    const sum=ii[(y2+1)*(W+1)+(x2+1)]-ii[y1*(W+1)+(x2+1)]-ii[(y2+1)*(W+1)+x1]+ii[y1*(W+1)+x1];
-    out[y*W+x]=g[y*W+x]<sum/cnt-C?1:0;
-  }}
+    const n=(x2-x1+1)*(y2-y1+1);
+    const s=ii[(y2+1)*(W+1)+(x2+1)]-ii[y1*(W+1)+(x2+1)]-ii[(y2+1)*(W+1)+x1]+ii[y1*(W+1)+x1];
+    out[y*W+x]=g[y*W+x]<(s/n-C)?1:0;
+  }
   return out;
 }
 
-// ── Connected components (row-by-row union-find) ────────────────────
-function connectedComponents(bw,W,H){
+// ── Connected components (Union-Find) ────────────────────────────
+function findBlobs(bw,W,H){
   const lbl=new Int32Array(W*H).fill(-1);
-  let nxt=0;const par=[];
+  let nxt=0; const par=[];
   const find=x=>{while(par[x]!==x)x=par[x]=par[par[x]];return x;};
   const union=(a,b)=>{a=find(a);b=find(b);if(a!==b)par[a]=b;};
-  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-    if(!bw[y*W+x])continue;
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+    if(!bw[y*W+x]) continue;
     const up=y>0&&bw[(y-1)*W+x]?lbl[(y-1)*W+x]:-1;
     const le=x>0&&bw[y*W+x-1]?lbl[y*W+x-1]:-1;
     if(up<0&&le<0){lbl[y*W+x]=nxt;par.push(nxt);nxt++;}
-    else if(up>=0&&le<0)lbl[y*W+x]=up;
-    else if(up<0&&le>=0)lbl[y*W+x]=le;
+    else if(up>=0&&le<0) lbl[y*W+x]=up;
+    else if(up<0&&le>=0) lbl[y*W+x]=le;
     else{union(up,le);lbl[y*W+x]=le;}
   }
   const st={};
-  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-    const l=lbl[y*W+x];if(l<0)continue;
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+    const l=lbl[y*W+x]; if(l<0) continue;
     const r=find(l);
-    if(!st[r])st[r]={x1:x,x2:x,y1:y,y2:y,a:0};
+    if(!st[r]) st[r]={x1:x,x2:x,y1:y,y2:y,a:0};
     const s=st[r];
-    if(x<s.x1)s.x1=x;if(x>s.x2)s.x2=x;
-    if(y<s.y1)s.y1=y;if(y>s.y2)s.y2=y;
+    if(x<s.x1)s.x1=x; if(x>s.x2)s.x2=x;
+    if(y<s.y1)s.y1=y; if(y>s.y2)s.y2=y;
     s.a++;
   }
   return Object.values(st).filter(s=>s.a>4).map(s=>({
-    cx:(s.x1+s.x2)/2,cy:(s.y1+s.y2)/2,w:s.x2-s.x1+1,h:s.y2-s.y1+1,area:s.a
+    cx:(s.x1+s.x2)/2, cy:(s.y1+s.y2)/2,
+    w:s.x2-s.x1+1, h:s.y2-s.y1+1, area:s.a
   }));
 }
 
-// ── Cluster circles by Y proximity ─────────────────────────────────
-function clusterY(pts,eps){
-  if(!pts.length)return[];
+// ── Cluster titik berdasarkan Y (eps adaptif) ────────────────────
+function clusterByY(pts,eps){
+  if(!pts.length) return [];
   const s=[...pts].sort((a,b)=>a.y-b.y);
   const cl=[[s[0]]];
   for(let i=1;i<s.length;i++){
     const last=cl[cl.length-1];
     const midY=last.reduce((a,p)=>a+p.y,0)/last.length;
-    Math.abs(s[i].y-midY)<=eps?last.push(s[i]):cl.push([s[i]]);
+    Math.abs(s[i].y-midY)<=eps ? last.push(s[i]) : cl.push([s[i]]);
   }
   return cl;
 }
 
-// ── Average brightness inside circle ───────────────────────────────
-function avgBright(gray,W,H,cx,cy,r){
+// ── Cluster baris berdasarkan X median (untuk pisah kolom soal) ──
+function clusterByX(rows,eps){
+  if(!rows.length) return [];
+  const withMx=rows.map(r=>({r, mx:medianX(r)}));
+  withMx.sort((a,b)=>a.mx-b.mx);
+  const cl=[[withMx[0].r]];
+  for(let i=1;i<withMx.length;i++){
+    const last=cl[cl.length-1];
+    const lastMx=medianX(last[last.length-1]);
+    Math.abs(withMx[i].mx-lastMx)<=eps ? last.push(withMx[i].r) : cl.push([withMx[i].r]);
+  }
+  return cl;
+}
+
+// ── Median X dari sebuah baris ───────────────────────────────────
+function medianX(row){
+  const xs=[...row].map(p=>p.x).sort((a,b)=>a-b);
+  return xs[Math.floor(xs.length/2)]||0;
+}
+
+// ── Pilih N bubble terbaik dari baris (paling merata jaraknya) ───
+function pickBestBubbles(sorted, nOpt, medR){
+  if(sorted.length===nOpt) return sorted;
+  if(sorted.length<nOpt) return null;
+  // Cari window nOpt bubble dengan jarak antar-bubble paling konsisten
+  let bestScore=Infinity, bestStart=0;
+  for(let i=0;i<=sorted.length-nOpt;i++){
+    const win=sorted.slice(i,i+nOpt);
+    const diffs=[];
+    for(let j=1;j<win.length;j++) diffs.push(win[j].x-win[j-1].x);
+    const avgD=diffs.reduce((a,b)=>a+b,0)/diffs.length;
+    const variance=diffs.reduce((a,d)=>a+(d-avgD)**2,0)/diffs.length;
+    // Skor = variance + penalti jika jarak antar bubble terlalu besar/kecil
+    const distPenalty=Math.abs(avgD-medR*2)*0.5;
+    const score=variance+distPenalty;
+    if(score<bestScore){bestScore=score;bestStart=i;}
+  }
+  return sorted.slice(bestStart,bestStart+nOpt);
+}
+
+// ── Sample brightness rata-rata dalam lingkaran ──────────────────
+function sampleBrightness(gray,W,H,cx,cy,r){
   let s=0,c=0;
-  const x0=Math.max(0,cx-r|0),x1=Math.min(W-1,(cx+r+1)|0);
-  const y0=Math.max(0,cy-r|0),y1=Math.min(H-1,(cy+r+1)|0);
-  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++)
+  const x0=Math.max(0,cx-r|0), x1=Math.min(W-1,(cx+r+1)|0);
+  const y0=Math.max(0,cy-r|0), y1=Math.min(H-1,(cy+r+1)|0);
+  for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++)
     if((x-cx)**2+(y-cy)**2<=r*r){s+=gray[y*W+x];c++;}
   return c>0?s/c:255;
 }
 
-// ═══════════════════════════════════════════════
 // RENDER SCAN RESULT
 // ═══════════════════════════════════════════════
 function renderResult(tpl){
